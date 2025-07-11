@@ -1,0 +1,70 @@
+"""Configuration management for Marty application."""
+
+import os
+from datetime import datetime
+from typing import Optional
+
+
+class Config:
+    """Application configuration."""
+
+    # Database
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./marty.db")
+
+    # Sinch SMS Configuration
+    SINCH_SERVICE_PLAN_ID: Optional[str] = os.getenv("SINCH_SERVICE_PLAN_ID")
+    SINCH_API_TOKEN: Optional[str] = os.getenv("SINCH_API_TOKEN")
+    SINCH_API_URL: str = os.getenv("SINCH_API_URL", "https://us.sms.api.sinch.com")
+
+    # Hardcover API Configuration
+    HARDCOVER_API_TOKEN: Optional[str] = os.getenv("HARDCOVER_API_TOKEN")
+    HARDCOVER_API_URL: str = os.getenv(
+        "HARDCOVER_API_URL", "https://api.hardcover.app/v1/graphql"
+    )
+
+    # Hardcover Token Expiry: 7/11/2026, 3:42:27 PM
+    HARDCOVER_TOKEN_EXPIRY: str = os.getenv(
+        "HARDCOVER_TOKEN_EXPIRY", "2026-07-11T15:42:27"
+    )
+
+    # Your Bookstore Integration (to be added)
+    BOOKSTORE_API_URL: Optional[str] = os.getenv("BOOKSTORE_API_URL")
+    BOOKSTORE_API_KEY: Optional[str] = os.getenv("BOOKSTORE_API_KEY")
+
+    # Bookshop.org Affiliate Integration (to be added)
+    BOOKSHOP_AFFILIATE_ID: Optional[str] = os.getenv("BOOKSHOP_AFFILIATE_ID")
+
+    @classmethod
+    def validate_hardcover_setup(cls) -> bool:
+        """Validate that Hardcover API is properly configured."""
+        if not cls.HARDCOVER_API_TOKEN:
+            return False
+
+        # Check if token is expired
+        try:
+            expiry = datetime.fromisoformat(
+                cls.HARDCOVER_TOKEN_EXPIRY.replace("Z", "+00:00")
+            )
+            if datetime.now() >= expiry:
+                return False
+        except ValueError:
+            # If we can't parse the expiry date, assume it's valid for now
+            pass
+
+        return True
+
+    @classmethod
+    def get_hardcover_headers(cls) -> dict[str, str]:
+        """Get headers for Hardcover API requests."""
+        if not cls.HARDCOVER_API_TOKEN:
+            raise ValueError("Hardcover API token not configured")
+
+        return {
+            "Authorization": cls.HARDCOVER_API_TOKEN,
+            "Content-Type": "application/json",
+            "User-Agent": "Marty-SMS-Bot/1.0 (Book recommendation bot)",
+        }
+
+
+# Global config instance
+config = Config()
