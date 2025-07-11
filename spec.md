@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-**Goal:** Text-based AI book recommendation system with personality-driven commerce integration  
-**Timeline:** 2 weeks (hackathon scope)  
-**Team:** Panat (generalist/AI/infra), Christian (Python/Postgres expert)  
+**Goal:** Text-based AI book recommendation system with personality-driven commerce integration
+**Timeline:** 2 weeks (hackathon scope)
+**Team:** Panat (generalist/AI/infra), Christian (Python/Postgres expert)
 **MVP Success:** Functional SMS/RCS bot that feels like texting a human bookseller
 
 ## Core Value Proposition
@@ -30,8 +30,8 @@ Customers text "Marty" (an AI wizard who used to work in tech) for book recommen
 ### Service Integration Flow
 
 ```
-SMS/RCS Message → Railway Webhook → Customer Lookup (Square) → 
-Conversation Processing (Claude + Context) → Book Lookup (Hardcover/Inventory) → 
+SMS/RCS Message → Railway Webhook → Customer Lookup (Square) →
+Conversation Processing (Claude + Context) → Book Lookup (Hardcover/Inventory) →
 Response Generation → SMS/RCS Response
 ```
 
@@ -109,7 +109,7 @@ CREATE TABLE rate_limits (
 # Expected payload structure (to be confirmed with Smobi)
 {
     "from": "+1234567890",
-    "to": "+1987654321", 
+    "to": "+1987654321",
     "message": "hey marty",
     "message_type": "RCS|SMS",
     "timestamp": "2025-07-11T15:30:00Z",
@@ -311,8 +311,8 @@ async def handle_error(error_type: str, context: dict) -> str:
 ```python
 def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
     expected = hmac.new(
-        secret.encode(), 
-        payload, 
+        secret.encode(),
+        payload,
         hashlib.sha256
     ).hexdigest()
     return hmac.compare_digest(signature, expected)
@@ -421,24 +421,24 @@ def get_book_availability(book_id: str):
 ### Manual Testing Scenarios
 
 1. **First-time customer flow**
-    
+
     - New phone number texts Marty
     - Request book recommendation
     - Purchase in-stock book
     - Verify Square integration
 2. **Returning customer flow**
-    
+
     - Existing customer texts
     - Marty references purchase history
     - Order out-of-stock book (bookshop.org handoff)
 3. **Edge cases**
-    
+
     - Rate limiting behavior
     - API failures and error responses
     - Conversation timeout and context loss
     - Off-hours messaging
 4. **Conversation quality**
-    
+
     - Personality consistency
     - Book recommendation accuracy
     - Natural conversation flow
@@ -464,7 +464,7 @@ logger.info("SMS received", extra={
 })
 
 logger.info("Claude response", extra={
-    "phone": phone, 
+    "phone": phone,
     "response": response,
     "token_count": tokens,
     "response_time": elapsed

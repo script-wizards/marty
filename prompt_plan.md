@@ -3,18 +3,18 @@
 ### Phase 1: Core Infrastructure Setup
 
 1. **Database Schema & Connection**
-    
+
     - Set up Supabase connection
     - Create database schema
     - Test database operations
 2. **Basic Web Service**
-    
+
     - Create Flask/FastAPI application
     - Health check endpoint
     - Basic error handling
     - Railway deployment configuration
 3. **SMS Webhook Foundation**
-    
+
     - Webhook endpoint structure
     - Request validation
     - Basic response mechanism
@@ -22,17 +22,17 @@
 ### Phase 2: External Service Integration
 
 4. **SMS/RCS Provider Integration**
-    
+
     - Webhook signature verification
     - Message parsing
     - Response sending
 5. **Square API Integration**
-    
+
     - Customer lookup by phone
     - Customer data caching
     - Order creation basics
 6. **Book Data Integration**
-    
+
     - Hardcover API connection
     - Book search functionality
     - Inventory management
@@ -40,17 +40,17 @@
 ### Phase 3: AI & Conversation Management
 
 7. **Conversation State Management**
-    
+
     - Message storage
     - Conversation threading
     - Context retrieval
 8. **Claude AI Integration**
-    
+
     - Basic prompt structure
     - Context injection
     - Response generation
 9. **Marty Personality Implementation**
-    
+
     - System prompt refinement
     - Dynamic context building
     - Response processing
@@ -58,17 +58,17 @@
 ### Phase 4: Commerce & Polish
 
 10. **Order Processing Flow**
-    
+
     - Purchase intent detection
     - Fulfillment options
     - Payment link generation
 11. **Error Handling & Rate Limiting**
-    
+
     - Comprehensive error responses
     - Rate limiting implementation
     - Monitoring and logging
 12. **End-to-End Testing & Polish**
-    
+
     - Integration testing
     - Performance optimization
     - Demo preparation
@@ -78,19 +78,19 @@
 ### Infrastructure (Days 1-3)
 
 1. **Database Setup**
-    
+
     - Create Supabase project
     - Define schema migrations
     - Basic CRUD operations
     - Connection pooling
 2. **Web Service Skeleton**
-    
+
     - Flask app structure
     - Environment configuration
     - Health monitoring
     - Structured logging
 3. **SMS Integration Foundation**
-    
+
     - Webhook endpoint
     - Message queue structure
     - Response framework
@@ -99,13 +99,13 @@
 ### External Services (Days 4-6)
 
 4. **Customer Management**
-    
+
     - Square API client
     - Customer lookup
     - JIT customer creation
     - Data synchronization
 5. **Book Data Layer**
-    
+
     - Hardcover API client
     - Search implementation
     - Inventory tracking
@@ -114,13 +114,13 @@
 ### AI Integration (Days 7-9)
 
 6. **Conversation Engine**
-    
+
     - Message persistence
     - Context window management
     - State tracking
     - History retrieval
 7. **AI Response System**
-    
+
     - Claude client setup
     - Prompt engineering
     - Response parsing
@@ -129,13 +129,13 @@
 ### Commerce (Days 10-12)
 
 8. **Purchase Flow**
-    
+
     - Intent recognition
     - Order creation
     - Payment integration
     - Fulfillment options
 9. **Production Readiness**
-    
+
     - Rate limiting
     - Error recovery
     - Monitoring setup
@@ -240,7 +240,7 @@ The steps are appropriately sized because:
 ### Prompt 1: Database Foundation Setup
 
 ```text
-Create a Python module for Supabase database operations for a bookstore SMS chatbot. 
+Create a Python module for Supabase database operations for a bookstore SMS chatbot.
 
 Requirements:
 1. Create a `database.py` module with a SupabaseClient class
