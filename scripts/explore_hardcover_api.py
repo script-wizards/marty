@@ -16,14 +16,10 @@ Usage:
 import asyncio
 import json
 import os
-import sys
 
 import httpx
 
-# Add parent directory to path to import config
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import config  # noqa: E402
+from config import config
 
 
 async def test_simple_request():

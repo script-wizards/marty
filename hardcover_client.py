@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+import time
 from typing import Any
 
 from gql import Client, gql
@@ -51,18 +51,18 @@ class RateLimiter:
     async def acquire(self):
         """Wait if necessary to respect rate limits."""
         async with self._lock:
-            now = datetime.now()
+            now = time.monotonic()
             # Remove old requests outside the window
             self.requests = [
                 req_time
                 for req_time in self.requests
-                if (now - req_time).total_seconds() < self.window_seconds
+                if now - req_time < self.window_seconds
             ]
 
             if len(self.requests) >= self.max_requests:
                 # Calculate wait time
                 oldest_request = self.requests[0]
-                wait_time = self.window_seconds - (now - oldest_request).total_seconds()
+                wait_time = self.window_seconds - (now - oldest_request)
                 if wait_time > 0:
                     logger.warning(
                         f"Rate limit reached, waiting {wait_time:.1f} seconds"
@@ -486,6 +486,7 @@ class HardcoverClient:
         """Close the client connection."""
         if self._client:
             await self._client.close_async()
+            self._client = None
 
 
 # Convenience function for testing
