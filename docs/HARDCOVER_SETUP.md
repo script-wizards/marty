@@ -43,7 +43,7 @@ client = HardcoverClient()
 # Search for books
 books = await client.search_books("dune frank herbert", limit=5)
 
-# Get book details  
+# Get book details
 book = await client.get_book_by_id(12345)
 
 # Get user recommendations
@@ -51,7 +51,7 @@ recommendations = await client.get_user_recommendations(limit=10)
 
 # Get trending books
 trending = await client.get_trending_books(
-    from_date="2025-01-01", 
+    from_date="2025-01-01",
     to_date="2025-01-31"
 )
 
@@ -145,4 +145,4 @@ uv run pytest tests/ --cov=hardcover_client
 1. **Explore**: Use `scripts/explore_hardcover_api.py` to discover new API features
 2. **Implement**: Add new methods to `hardcover_client.py`
 3. **Test**: Add tests to `tests/test_hardcover.py`
-4. **Document**: Update this file with new capabilities 
+4. **Document**: Update this file with new capabilities

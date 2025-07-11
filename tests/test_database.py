@@ -3,43 +3,35 @@ Comprehensive tests for database operations.
 Tests CRUD operations, async functionality, and error handling.
 """
 
+from collections.abc import AsyncGenerator
+from decimal import Decimal
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from database import Base, init_db, close_db
-from database import (
-    Customer,
-    Conversation,
-    Message,
-    Book,
-    Inventory,
-    Order,
-    OrderItem,
-    RateLimit,
-    CustomerCreate,
-    CustomerUpdate,
-    ConversationCreate,
-    ConversationUpdate,
-    MessageCreate,
-    BookCreate,
-    BookUpdate,
-    InventoryCreate,
-    InventoryUpdate,
-)
 from crud import (
-    CustomerCRUD,
-    ConversationCRUD,
-    MessageCRUD,
     BookCRUD,
+    ConversationCRUD,
+    CustomerCRUD,
     InventoryCRUD,
+    MessageCRUD,
     RateLimitCRUD,
 )
-
+from database import (
+    Base,
+    Book,
+    BookCreate,
+    BookUpdate,
+    Conversation,
+    ConversationCreate,
+    Customer,
+    CustomerCreate,
+    CustomerUpdate,
+    InventoryCreate,
+    MessageCreate,
+)
 
 # Test database configuration
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -499,7 +491,7 @@ class TestInventoryCRUD:
             reserved=0,
             available=True,
         )
-        inventory = await InventoryCRUD.create(db_session, inventory_data)
+        await InventoryCRUD.create(db_session, inventory_data)
 
         # Reserve some inventory
         reserved_inventory = await InventoryCRUD.reserve_inventory(
@@ -590,7 +582,7 @@ class TestRateLimitCRUD:
     async def test_cleanup_expired_rate_limits(self, db_session: AsyncSession):
         """Test cleaning up expired rate limit records."""
         # Create a rate limit that will expire immediately
-        rate_limit = await RateLimitCRUD.create(db_session, "+1234567890", "sms", 0)
+        await RateLimitCRUD.create(db_session, "+1234567890", "sms", 0)
 
         # Verify it exists
         current_limit = await RateLimitCRUD.get_current_limit(

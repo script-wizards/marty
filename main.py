@@ -1,12 +1,13 @@
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from datetime import datetime, timezone
-import os
 import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from database import get_db, init_db, close_db
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import close_db, get_db, init_db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +57,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
         return {
             "status": "ok",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
             "environment": os.getenv("ENV", "development"),
@@ -67,11 +68,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             status_code=503,
             detail={
                 "status": "error",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "error": "Database connectivity failed",
                 "database": {"status": "error"},
             },
-        )
+        ) from e
 
 
 if __name__ == "__main__":

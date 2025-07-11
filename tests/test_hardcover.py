@@ -4,10 +4,7 @@ Tests only the methods that actually exist in HardcoverClient.
 """
 
 import asyncio
-import json
-from datetime import datetime
-from typing import Any, AsyncGenerator, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -427,6 +424,7 @@ class TestEnhancedErrorHandling:
     async def test_auth_error_handling(self, hardcover_client, mock_gql_session):
         """Test authentication error handling."""
         from gql.transport.exceptions import TransportError
+
         from hardcover_client import HardcoverAuthError
 
         mock_gql_session.execute.side_effect = TransportError("401 Unauthorized")
@@ -440,6 +438,7 @@ class TestEnhancedErrorHandling:
     async def test_timeout_error_handling(self, hardcover_client, mock_gql_session):
         """Test timeout error handling."""
         from gql.transport.exceptions import TransportError
+
         from hardcover_client import HardcoverTimeoutError
 
         mock_gql_session.execute.side_effect = TransportError("Query timeout exceeded")
@@ -453,6 +452,7 @@ class TestEnhancedErrorHandling:
     async def test_rate_limit_error_handling(self, hardcover_client, mock_gql_session):
         """Test rate limit error handling."""
         from gql.transport.exceptions import TransportError
+
         from hardcover_client import HardcoverRateLimitError
 
         # Mock a 429 error that persists through retries

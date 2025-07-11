@@ -4,30 +4,27 @@ Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 """
 
 import os
-from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
-from uuid import uuid4
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, Optional
+from uuid import uuid4
 
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    DateTime,
-    Boolean,
-    Text,
-    Numeric,
-    ForeignKey,
     JSON,
-    UniqueConstraint,
+    Boolean,
+    DateTime,
+    ForeignKey,
     Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
     func,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from pydantic import BaseModel, Field, ConfigDict, validator
-from pydantic.types import UUID4
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 # Database URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
@@ -50,24 +47,24 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(
         String(20), unique=True, nullable=False, index=True
     )
-    square_customer_id: Mapped[Optional[str]] = mapped_column(
+    square_customer_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, nullable=True
     )
-    first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=func.now()
+        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
-    conversations: Mapped[List["Conversation"]] = relationship(
+    conversations: Mapped[list["Conversation"]] = relationship(
         "Conversation", back_populates="customer"
     )
-    orders: Mapped[List["Order"]] = relationship("Order", back_populates="customer")
+    orders: Mapped[list["Order"]] = relationship("Order", back_populates="customer")
 
 
 class Conversation(Base):
@@ -84,21 +81,21 @@ class Conversation(Base):
         String(50), default="active"
     )  # active, ended, timeout
     last_message_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
 
     # Store conversation context and metadata
-    context: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    mentioned_books: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    mentioned_books: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
     customer: Mapped["Customer"] = relationship(
         "Customer", back_populates="conversations"
     )
-    messages: Mapped[List["Message"]] = relationship(
+    messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="conversation"
     )
 
@@ -117,11 +114,11 @@ class Message(Base):
     )  # inbound, outbound
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
 
     # SMS/RCS metadata
-    message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="pending"
     )  # pending, sent, delivered, failed
@@ -143,40 +140,38 @@ class Book(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
-    isbn: Mapped[Optional[str]] = mapped_column(
+    isbn: Mapped[str | None] = mapped_column(
         String(20), unique=True, nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    author: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
-    publisher: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    publication_date: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
-    )
+    author: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    publication_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # External IDs
-    hardcover_id: Mapped[Optional[str]] = mapped_column(
+    hardcover_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True
     )
-    bookshop_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    bookshop_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Metadata
-    genre: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    format: Mapped[Optional[str]] = mapped_column(
+    genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    format: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )  # hardcover, paperback, ebook
-    page_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=func.now()
+        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
-    inventory: Mapped[List["Inventory"]] = relationship(
+    inventory: Mapped[list["Inventory"]] = relationship(
         "Inventory", back_populates="book"
     )
 
@@ -195,12 +190,12 @@ class Inventory(Base):
     )  # store, warehouse, bookshop
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reserved: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Availability
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     last_updated: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
 
     # Relationships
@@ -219,7 +214,7 @@ class Order(Base):
     customer_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("customers.id"), nullable=False
     )
-    conversation_id: Mapped[Optional[str]] = mapped_column(
+    conversation_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("conversations.id"), nullable=True
     )
 
@@ -230,8 +225,8 @@ class Order(Base):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
 
     # Square integration
-    square_order_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    payment_link: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    square_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    payment_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payment_status: Mapped[str] = mapped_column(
         String(50), default="pending"
     )  # pending, paid, failed
@@ -240,22 +235,20 @@ class Order(Base):
     fulfillment_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # pickup, shipping, digital
-    shipping_address: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )
+    shipping_address: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=func.now()
+        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
     customer: Mapped["Customer"] = relationship("Customer", back_populates="orders")
     conversation: Mapped[Optional["Conversation"]] = relationship("Conversation")
-    items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order")
+    items: Mapped[list["OrderItem"]] = relationship("OrderItem", back_populates="order")
 
 
 class OrderItem(Base):
@@ -306,17 +299,17 @@ class RateLimit(Base):
 # Pydantic Schemas
 class CustomerCreate(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
-    first_name: Optional[str] = Field(None, max_length=100)
-    last_name: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = Field(None, max_length=255)
-    square_customer_id: Optional[str] = Field(None, max_length=100)
+    first_name: str | None = Field(None, max_length=100)
+    last_name: str | None = Field(None, max_length=100)
+    email: str | None = Field(None, max_length=255)
+    square_customer_id: str | None = Field(None, max_length=100)
 
 
 class CustomerUpdate(BaseModel):
-    first_name: Optional[str] = Field(None, max_length=100)
-    last_name: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = Field(None, max_length=255)
-    square_customer_id: Optional[str] = Field(None, max_length=100)
+    first_name: str | None = Field(None, max_length=100)
+    last_name: str | None = Field(None, max_length=100)
+    email: str | None = Field(None, max_length=255)
+    square_customer_id: str | None = Field(None, max_length=100)
 
 
 class CustomerResponse(BaseModel):
@@ -324,10 +317,10 @@ class CustomerResponse(BaseModel):
 
     id: str
     phone: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
-    square_customer_id: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    square_customer_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -336,14 +329,14 @@ class ConversationCreate(BaseModel):
     customer_id: str
     phone: str
     status: str = "active"
-    context: Optional[Dict[str, Any]] = None
-    mentioned_books: Optional[List[str]] = None
+    context: dict[str, Any] | None = None
+    mentioned_books: list[str] | None = None
 
 
 class ConversationUpdate(BaseModel):
-    status: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
-    mentioned_books: Optional[List[str]] = None
+    status: str | None = None
+    context: dict[str, Any] | None = None
+    mentioned_books: list[str] | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -355,15 +348,15 @@ class ConversationResponse(BaseModel):
     status: str
     last_message_at: datetime
     created_at: datetime
-    context: Optional[Dict[str, Any]] = None
-    mentioned_books: Optional[List[str]] = None
+    context: dict[str, Any] | None = None
+    mentioned_books: list[str] | None = None
 
 
 class MessageCreate(BaseModel):
     conversation_id: str
     direction: str = Field(..., pattern="^(inbound|outbound)$")
     content: str = Field(..., min_length=1)
-    message_id: Optional[str] = None
+    message_id: str | None = None
     status: str = "pending"
 
 
@@ -375,55 +368,55 @@ class MessageResponse(BaseModel):
     direction: str
     content: str
     timestamp: datetime
-    message_id: Optional[str] = None
+    message_id: str | None = None
     status: str
 
 
 class BookCreate(BaseModel):
-    isbn: Optional[str] = Field(None, max_length=20)
+    isbn: str | None = Field(None, max_length=20)
     title: str = Field(..., min_length=1, max_length=500)
-    author: Optional[str] = Field(None, max_length=500)
-    description: Optional[str] = None
-    price: Optional[Decimal] = Field(None, ge=0)
-    publisher: Optional[str] = Field(None, max_length=200)
-    publication_date: Optional[datetime] = None
-    hardcover_id: Optional[str] = Field(None, max_length=100)
-    bookshop_url: Optional[str] = Field(None, max_length=500)
-    genre: Optional[str] = Field(None, max_length=100)
-    format: Optional[str] = Field(None, max_length=50)
-    page_count: Optional[int] = Field(None, ge=0)
+    author: str | None = Field(None, max_length=500)
+    description: str | None = None
+    price: Decimal | None = Field(None, ge=0)
+    publisher: str | None = Field(None, max_length=200)
+    publication_date: datetime | None = None
+    hardcover_id: str | None = Field(None, max_length=100)
+    bookshop_url: str | None = Field(None, max_length=500)
+    genre: str | None = Field(None, max_length=100)
+    format: str | None = Field(None, max_length=50)
+    page_count: int | None = Field(None, ge=0)
 
 
 class BookUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=500)
-    author: Optional[str] = Field(None, max_length=500)
-    description: Optional[str] = None
-    price: Optional[Decimal] = Field(None, ge=0)
-    publisher: Optional[str] = Field(None, max_length=200)
-    publication_date: Optional[datetime] = None
-    hardcover_id: Optional[str] = Field(None, max_length=100)
-    bookshop_url: Optional[str] = Field(None, max_length=500)
-    genre: Optional[str] = Field(None, max_length=100)
-    format: Optional[str] = Field(None, max_length=50)
-    page_count: Optional[int] = Field(None, ge=0)
+    title: str | None = Field(None, min_length=1, max_length=500)
+    author: str | None = Field(None, max_length=500)
+    description: str | None = None
+    price: Decimal | None = Field(None, ge=0)
+    publisher: str | None = Field(None, max_length=200)
+    publication_date: datetime | None = None
+    hardcover_id: str | None = Field(None, max_length=100)
+    bookshop_url: str | None = Field(None, max_length=500)
+    genre: str | None = Field(None, max_length=100)
+    format: str | None = Field(None, max_length=50)
+    page_count: int | None = Field(None, ge=0)
 
 
 class BookResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    isbn: Optional[str] = None
+    isbn: str | None = None
     title: str
-    author: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[Decimal] = None
-    publisher: Optional[str] = None
-    publication_date: Optional[datetime] = None
-    hardcover_id: Optional[str] = None
-    bookshop_url: Optional[str] = None
-    genre: Optional[str] = None
-    format: Optional[str] = None
-    page_count: Optional[int] = None
+    author: str | None = None
+    description: str | None = None
+    price: Decimal | None = None
+    publisher: str | None = None
+    publication_date: datetime | None = None
+    hardcover_id: str | None = None
+    bookshop_url: str | None = None
+    genre: str | None = None
+    format: str | None = None
+    page_count: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -433,15 +426,15 @@ class InventoryCreate(BaseModel):
     location: str = Field(..., max_length=100)
     quantity: int = Field(..., ge=0)
     reserved: int = Field(0, ge=0)
-    price: Optional[Decimal] = Field(None, ge=0)
+    price: Decimal | None = Field(None, ge=0)
     available: bool = True
 
 
 class InventoryUpdate(BaseModel):
-    quantity: Optional[int] = Field(None, ge=0)
-    reserved: Optional[int] = Field(None, ge=0)
-    price: Optional[Decimal] = Field(None, ge=0)
-    available: Optional[bool] = None
+    quantity: int | None = Field(None, ge=0)
+    reserved: int | None = Field(None, ge=0)
+    price: Decimal | None = Field(None, ge=0)
+    available: bool | None = None
 
 
 class InventoryResponse(BaseModel):
@@ -452,7 +445,7 @@ class InventoryResponse(BaseModel):
     location: str
     quantity: int
     reserved: int
-    price: Optional[Decimal] = None
+    price: Decimal | None = None
     available: bool
     last_updated: datetime
 

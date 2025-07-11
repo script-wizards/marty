@@ -17,14 +17,13 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict
+
+import httpx
 
 # Add parent directory to path to import config
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import httpx
-
-from config import config
+from config import config  # noqa: E402
 
 
 async def test_simple_request():
@@ -67,7 +66,7 @@ async def test_simple_request():
 
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ Connected successfully!")
+                print("✅ Connected successfully!")
                 print(f"   User: {data.get('data', {}).get('me', {})}")
                 return True
             else:
@@ -96,7 +95,7 @@ async def explore_schema():
         "query": """
             query IntrospectionQuery {
                 __schema {
-                    queryType { 
+                    queryType {
                         name
                         fields {
                             name
@@ -159,7 +158,7 @@ async def explore_schema():
                         print(f"    └─ {description}")
 
                 # Look for Book-related types
-                print(f"\n📖 Book-related types:")
+                print("\n📖 Book-related types:")
                 types = schema.get("types", [])
 
                 for type_def in types:
@@ -184,7 +183,7 @@ async def explore_schema():
                 # Save full schema for detailed analysis
                 with open("hardcover_schema.json", "w") as f:
                     json.dump(schema_data, f, indent=2)
-                print(f"\n💾 Full schema saved to 'hardcover_schema.json'")
+                print("\n💾 Full schema saved to 'hardcover_schema.json'")
 
                 return True
             else:
@@ -265,7 +264,7 @@ async def test_book_search():
     ]
 
     async with httpx.AsyncClient() as client:
-        print(f"\n🔍 Testing book search capabilities...")
+        print("\n🔍 Testing book search capabilities...")
 
         for search_test in search_queries:
             print(f"\n  Testing: {search_test['name']}")

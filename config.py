@@ -2,7 +2,6 @@
 
 import os
 from datetime import datetime
-from typing import Optional
 
 
 class Config:
@@ -12,12 +11,12 @@ class Config:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./marty.db")
 
     # Sinch SMS Configuration
-    SINCH_SERVICE_PLAN_ID: Optional[str] = os.getenv("SINCH_SERVICE_PLAN_ID")
-    SINCH_API_TOKEN: Optional[str] = os.getenv("SINCH_API_TOKEN")
+    SINCH_SERVICE_PLAN_ID: str | None = os.getenv("SINCH_SERVICE_PLAN_ID")
+    SINCH_API_TOKEN: str | None = os.getenv("SINCH_API_TOKEN")
     SINCH_API_URL: str = os.getenv("SINCH_API_URL", "https://us.sms.api.sinch.com")
 
     # Hardcover API Configuration
-    HARDCOVER_API_TOKEN: Optional[str] = os.getenv("HARDCOVER_API_TOKEN")
+    HARDCOVER_API_TOKEN: str | None = os.getenv("HARDCOVER_API_TOKEN")
     HARDCOVER_API_URL: str = os.getenv(
         "HARDCOVER_API_URL", "https://api.hardcover.app/v1/graphql"
     )
@@ -28,11 +27,11 @@ class Config:
     )
 
     # Your Bookstore Integration (to be added)
-    BOOKSTORE_API_URL: Optional[str] = os.getenv("BOOKSTORE_API_URL")
-    BOOKSTORE_API_KEY: Optional[str] = os.getenv("BOOKSTORE_API_KEY")
+    BOOKSTORE_API_URL: str | None = os.getenv("BOOKSTORE_API_URL")
+    BOOKSTORE_API_KEY: str | None = os.getenv("BOOKSTORE_API_KEY")
 
     # Bookshop.org Affiliate Integration (to be added)
-    BOOKSHOP_AFFILIATE_ID: Optional[str] = os.getenv("BOOKSHOP_AFFILIATE_ID")
+    BOOKSHOP_AFFILIATE_ID: str | None = os.getenv("BOOKSHOP_AFFILIATE_ID")
 
     @classmethod
     def validate_hardcover_setup(cls) -> bool:

@@ -1,18 +1,15 @@
 """Hardcover API GraphQL client for book recommendations."""
 
 import asyncio
-import json
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime
+from typing import Any
 
-import httpx
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
 
 from config import config
-
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -99,7 +96,7 @@ class HardcoverClient:
 
         self.api_url = config.HARDCOVER_API_URL
         self.headers = config.get_hardcover_headers()
-        self._client: Optional[Client] = None
+        self._client: Client | None = None
         self.rate_limiter = RateLimiter(
             max_requests=rate_limit_max_requests, window_seconds=60
         )
@@ -137,12 +134,12 @@ class HardcoverClient:
             except TransportQueryError as e:
                 # GraphQL errors (like field not found)
                 logger.error(f"GraphQL query error: {e}")
-                raise HardcoverAPIError(f"GraphQL query error: {e}")
+                raise HardcoverAPIError(f"GraphQL query error: {e}") from e
 
             except TransportError as e:
                 # Transport errors (network, timeout, etc)
                 if "401" in str(e) or "403" in str(e):
-                    raise HardcoverAuthError(f"Authentication failed: {e}")
+                    raise HardcoverAuthError(f"Authentication failed: {e}") from e
                 elif "429" in str(e):
                     # Rate limit hit despite our limiter - wait longer
                     wait_time = (
@@ -152,7 +149,9 @@ class HardcoverClient:
                     await asyncio.sleep(wait_time)
                     last_error = HardcoverRateLimitError(f"Rate limit exceeded: {e}")
                 elif "timeout" in str(e).lower():
-                    raise HardcoverTimeoutError(f"Query timeout (30s limit): {e}")
+                    raise HardcoverTimeoutError(
+                        f"Query timeout (30s limit): {e}"
+                    ) from e
                 else:
                     last_error = e
                     if attempt < self._retry_count - 1:
@@ -175,9 +174,10 @@ class HardcoverClient:
                 f"Failed after {self._retry_count} attempts: {last_error}"
             )
 
-    async def introspect_schema(self) -> Dict[str, Any]:
+    async def introspect_schema(self) -> dict[str, Any]:
         """Get the GraphQL schema for exploration."""
-        introspection_query = gql("""
+        introspection_query = gql(
+            """
             query IntrospectionQuery {
                 __schema {
                     queryType { name }
@@ -261,14 +261,16 @@ class HardcoverClient:
                     }
                 }
             }
-        """)
+        """
+        )
 
         logger.info("Introspecting GraphQL schema")
         return await self._execute_with_retry(introspection_query)
 
-    async def get_current_user(self) -> Dict[str, Any]:
+    async def get_current_user(self) -> dict[str, Any]:
         """Get current user information (test query)."""
-        query = gql("""
+        query = gql(
+            """
             query {
                 me {
                     id
@@ -276,14 +278,16 @@ class HardcoverClient:
                     email
                 }
             }
-        """)
+        """
+        )
 
         logger.info("Getting current user information")
         return await self._execute_with_retry(query)
 
-    async def search_books(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    async def search_books(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for books using Hardcover's search API (optimized for production)."""
-        search_query = gql("""
+        search_query = gql(
+            """
             query SearchBooks($query: String!, $limit: Int!) {
                 search(
                     query: $query,
@@ -297,7 +301,8 @@ class HardcoverClient:
                     query
                 }
             }
-        """)
+        """
+        )
 
         variables = {"query": query, "limit": limit}
 
@@ -314,9 +319,10 @@ class HardcoverClient:
 
         return []
 
-    async def search_books_raw(self, query: str, limit: int = 5) -> Dict[str, Any]:
+    async def search_books_raw(self, query: str, limit: int = 5) -> dict[str, Any]:
         """Search for books and return raw search results (includes the huge results blob)."""
-        search_query = gql("""
+        search_query = gql(
+            """
             query SearchBooksRaw($query: String!, $limit: Int!) {
                 search(
                     query: $query,
@@ -331,7 +337,8 @@ class HardcoverClient:
                     results
                 }
             }
-        """)
+        """
+        )
 
         variables = {"query": query, "limit": limit}
 
@@ -339,9 +346,10 @@ class HardcoverClient:
         result = await self._execute_with_retry(search_query, variables)
         return result.get("search", {})
 
-    async def get_book_by_id(self, book_id: int) -> Optional[Dict[str, Any]]:
+    async def get_book_by_id(self, book_id: int) -> dict[str, Any] | None:
         """Get detailed book information by ID."""
-        query = gql("""
+        query = gql(
+            """
             query GetBook($id: Int!) {
                 books_by_pk(id: $id) {
                     id
@@ -368,7 +376,8 @@ class HardcoverClient:
                     }
                 }
             }
-        """)
+        """
+        )
 
         variables = {"id": book_id}
 
@@ -376,9 +385,10 @@ class HardcoverClient:
         result = await self._execute_with_retry(query, variables)
         return result.get("books_by_pk")
 
-    async def get_user_recommendations(self, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_user_recommendations(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get personalized book recommendations for the authenticated user."""
-        query = gql("""
+        query = gql(
+            """
             query GetRecommendations($limit: Int!) {
                 recommendations(limit: $limit) {
                     id
@@ -395,7 +405,8 @@ class HardcoverClient:
                     }
                 }
             }
-        """)
+        """
+        )
 
         variables = {"limit": limit}
 
@@ -409,16 +420,18 @@ class HardcoverClient:
         to_date: str = "2025-07-01",
         limit: int = 10,
         offset: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get currently trending/popular books for a date range."""
-        query = gql("""
+        query = gql(
+            """
             query GetTrendingBooks($from: String!, $to: String!, $limit: Int!, $offset: Int!) {
                 books_trending(from: $from, to: $to, limit: $limit, offset: $offset) {
                     error
                     ids
                 }
             }
-        """)
+        """
+        )
 
         variables = {"from": from_date, "to": to_date, "limit": limit, "offset": offset}
 
@@ -428,9 +441,10 @@ class HardcoverClient:
         result = await self._execute_with_retry(query, variables)
         return result.get("books_trending", {})
 
-    async def get_books_by_ids(self, book_ids: List[int]) -> List[Dict[str, Any]]:
+    async def get_books_by_ids(self, book_ids: list[int]) -> list[dict[str, Any]]:
         """Get detailed book information for multiple books by their IDs."""
-        query = gql("""
+        query = gql(
+            """
             query GetBooksByIds($ids: [Int!]!) {
                 books(where: {id: {_in: $ids}}) {
                     id
@@ -457,7 +471,8 @@ class HardcoverClient:
                     }
                 }
             }
-        """)
+        """
+        )
 
         variables = {"ids": book_ids}
 
