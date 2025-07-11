@@ -2,250 +2,203 @@
 
 ### Phase 1: Core Infrastructure Setup
 
-1. **Database Schema & Connection**
+1. **Modern Python Foundation**
 
-    - Set up Supabase connection
-    - Create database schema
-    - Test database operations
-2. **Basic Web Service**
+    - FastAPI application with async support
+    - Hypercorn ASGI server with dual stack IPv4/IPv6
+    - uv for dependency management
+    - pyproject.toml configuration
+    - Ruff linting and formatting
+    - Pre-commit hooks
+    - Pytest with async support
+    - Comprehensive test coverage
 
-    - Create Flask/FastAPI application
-    - Health check endpoint
-    - Basic error handling
+2. **Database Schema & Connection**
+
+    - Set up Supabase connection with async SQLAlchemy
+    - Create database schema with Alembic migrations
+    - Implement Pydantic models for validation
+    - Add async connection pooling
+3. **Production Web Service**
+
+    - FastAPI application with proper structure
+    - Health check endpoint with database connectivity
+    - Error handling middleware
+    - Structured logging with correlation IDs
     - Railway deployment configuration
-3. **SMS Webhook Foundation**
-
-    - Webhook endpoint structure
-    - Request validation
-    - Basic response mechanism
+    - Environment variable validation
 
 ### Phase 2: External Service Integration
 
 4. **SMS/RCS Provider Integration**
 
     - Webhook signature verification
-    - Message parsing
-    - Response sending
+    - Message parsing with Pydantic
+    - Response sending with background tasks
 5. **Square API Integration**
 
-    - Customer lookup by phone
-    - Customer data caching
-    - Order creation basics
+    - Customer lookup by phone (async API calls)
+    - Customer data caching with Redis
+    - Order creation with proper error handling
 6. **Book Data Integration**
 
-    - Hardcover API connection
-    - Book search functionality
-    - Inventory management
+    - Hardcover API connection (async API calls)
+    - Book search functionality with caching
+    - Inventory management with updates
 
 ### Phase 3: AI & Conversation Management
 
 7. **Conversation State Management**
 
-    - Message storage
-    - Conversation threading
-    - Context retrieval
+    - Message storage with database
+    - Conversation threading with Redis
+    - Context retrieval with efficient queries
 8. **Claude AI Integration**
 
-    - Basic prompt structure
-    - Context injection
-    - Response generation
+    - Claude client with proper timeout handling (async API calls)
+    - Context injection with Pydantic models
+    - Response generation with background tasks
 9. **Marty Personality Implementation**
 
-    - System prompt refinement
-    - Dynamic context building
-    - Response processing
+    - System prompt refinement with dynamic context
+    - Response processing with personality layer
+    - Message formatting for SMS constraints
 
 ### Phase 4: Commerce & Polish
 
 10. **Order Processing Flow**
 
-    - Purchase intent detection
-    - Fulfillment options
-    - Payment link generation
-11. **Error Handling & Rate Limiting**
+    - Purchase intent detection with LLM
+    - Fulfillment options with async processing
+    - Payment link generation with Square
+11. **Production Features**
 
-    - Comprehensive error responses
-    - Rate limiting implementation
-    - Monitoring and logging
+    - Rate limiting with Redis
+    - Comprehensive error handling
+    - Monitoring and metrics with structured logging
 12. **End-to-End Testing & Polish**
 
-    - Integration testing
-    - Performance optimization
-    - Demo preparation
+    - Integration testing with test containers
+    - Performance optimization with async patterns
+    - Demo preparation with realistic data
 
-## Iterative Breakdown - Round 1
-
-### Infrastructure (Days 1-3)
-
-1. **Database Setup**
-
-    - Create Supabase project
-    - Define schema migrations
-    - Basic CRUD operations
-    - Connection pooling
-2. **Web Service Skeleton**
-
-    - Flask app structure
-    - Environment configuration
-    - Health monitoring
-    - Structured logging
-3. **SMS Integration Foundation**
-
-    - Webhook endpoint
-    - Message queue structure
-    - Response framework
-    - Testing harness
-
-### External Services (Days 4-6)
-
-4. **Customer Management**
-
-    - Square API client
-    - Customer lookup
-    - JIT customer creation
-    - Data synchronization
-5. **Book Data Layer**
-
-    - Hardcover API client
-    - Search implementation
-    - Inventory tracking
-    - Cache strategy
-
-### AI Integration (Days 7-9)
-
-6. **Conversation Engine**
-
-    - Message persistence
-    - Context window management
-    - State tracking
-    - History retrieval
-7. **AI Response System**
-
-    - Claude client setup
-    - Prompt engineering
-    - Response parsing
-    - Error handling
-
-### Commerce (Days 10-12)
-
-8. **Purchase Flow**
-
-    - Intent recognition
-    - Order creation
-    - Payment integration
-    - Fulfillment options
-9. **Production Readiness**
-
-    - Rate limiting
-    - Error recovery
-    - Monitoring setup
-    - Performance tuning
-
-## Iterative Breakdown - Round 2 (Smaller Steps)
+## Updated Iterative Breakdown
 
 ### Step 1: Database Foundation
 
-- 1.1 Supabase connection class
-- 1.2 Customer table operations
-- 1.3 Conversation table operations
-- 1.4 Book/inventory operations
-- 1.5 Integration tests
+- 1.1 SQLAlchemy setup with Supabase (async for I/O, sync for logic)
+- 1.2 Pydantic models for all data structures
+- 1.3 Alembic migrations for schema management
+- 1.4 Connection pooling with asyncpg
+- 1.5 Integration tests with test database
 
-### Step 2: Web Service Core
+### Step 2: Production Web Service Enhancement
 
-- 2.1 Flask app initialization
-- 2.2 Configuration management
+- 2.1 FastAPI app with modern structure
+- 2.2 Configuration management with pyproject.toml
 - 2.3 Health check endpoint
-- 2.4 Error handler middleware
-- 2.5 Logging setup
+- 2.4 Environment variable validation on startup
+- 2.5 Railway deployment configuration
 
-### Step 3: SMS Webhook
+### Step 3: SMS Webhook with Background Tasks
 
-- 3.1 Webhook route definition
-- 3.2 Signature verification
-- 3.3 Message parsing
-- 3.4 Response queue
-- 3.5 Mock SMS provider
+- 3.1 FastAPI webhook route with Pydantic validation
+- 3.2 HMAC signature verification middleware
+- 3.3 Background task queue with FastAPI
+- 3.4 Redis for message queueing
+- 3.5 Mock SMS provider for testing
 
 ### Step 4: Customer Service
 
-- 4.1 Square API client wrapper
-- 4.2 Customer search by phone
-- 4.3 Customer creation
-- 4.4 Local cache sync
-- 4.5 Integration tests
+- 4.1 Square API client with httpx (async for API calls)
+- 4.2 Customer search with Redis caching
+- 4.3 Customer creation with proper error handling
+- 4.4 Background sync with Square data
+- 4.5 Integration tests with mocked Square API
 
-### Step 5: Book Service
+### Step 5: Book Service with Modern Caching
 
-- 5.1 Hardcover API client
-- 5.2 Book search functionality
-- 5.3 Inventory management
-- 5.4 Book data enrichment
-- 5.5 Cache implementation
+- 5.1 Hardcover API client (async for API calls)
+- 5.2 Book search with Redis caching
+- 5.3 Inventory management with updates
+- 5.4 Book data enrichment with background tasks
+- 5.5 Cache invalidation strategies
 
-### Step 6: Conversation Manager
+### Step 6: Conversation Manager with Redis
 
-- 6.1 Message storage
-- 6.2 Conversation threading
-- 6.3 Context window extraction
-- 6.4 Book mention tracking
-- 6.5 Timeout handling
+- 6.1 Message storage with database (async I/O)
+- 6.2 Conversation threading with Redis
+- 6.3 Context window management with efficient queries
+- 6.4 Book mention tracking with text processing
+- 6.5 Timeout handling with Redis TTL
 
 ### Step 7: AI Integration
 
-- 7.1 Claude client setup
-- 7.2 Base prompt structure
-- 7.3 Context injection
-- 7.4 Response generation
-- 7.5 Message splitting
+- 7.1 Claude client setup with proper timeouts (async for API calls)
+- 7.2 Pydantic models for AI requests/responses
+- 7.3 Context injection with efficient serialization
+- 7.4 Response generation with background tasks
+- 7.5 Message splitting with intelligent breaks
 
-### Step 8: Marty Personality
+### Step 8: Marty Personality with Modern Patterns
 
-- 8.1 System prompt implementation
-- 8.2 Dynamic context building
-- 8.3 Response personality layer
-- 8.4 Error message personality
-- 8.5 Testing conversations
+- 8.1 System prompt management with template engine
+- 8.2 Dynamic context building with Pydantic
+- 8.3 Response personality layer with text processing
+- 8.4 Error message personality with fallback responses
+- 8.5 A/B testing framework for personality tweaks
 
-### Step 9: Purchase Flow
+### Step 9: Purchase Flow with State Management
 
-- 9.1 Intent detection
-- 9.2 Book reference resolution
-- 9.3 Order creation flow
-- 9.4 Payment link generation
-- 9.5 Fulfillment handling
+- 9.1 Intent detection with LLM and confidence scoring
+- 9.2 Book reference resolution with vector search
+- 9.3 Order creation flow with state machines
+- 9.4 Payment link generation with Square async API
+- 9.5 Fulfillment handling with background tasks
 
-### Step 10: Production Features
+### Step 10: Production Features with Monitoring
 
-- 10.1 Rate limiting
-- 10.2 Comprehensive error handling
-- 10.3 Monitoring integration
-- 10.4 Performance optimization
-- 10.5 End-to-end testing
+- 10.1 Rate limiting with Redis and sliding windows
+- 10.2 Comprehensive error handling with structured logging
+- 10.3 Monitoring integration with OpenTelemetry
+- 10.4 Performance optimization (async for I/O, sync for logic)
+- 10.5 End-to-end testing with realistic scenarios
 
-## Final Review of Step Sizing
+## Technology Stack Updates
 
-The steps are appropriately sized because:
+### Core Stack
+- **Web Framework**: FastAPI (async, modern, fast)
+- **ASGI Server**: Hypercorn (dual stack IPv4/IPv6)
+- **Database**: Supabase + async SQLAlchemy
+- **Caching**: Redis for session/cache management
+- **Dependency Management**: uv + pyproject.toml
+- **Code Quality**: ruff + pre-commit hooks
+- **Testing**: pytest + pytest-asyncio
+- **Deployment**: Railway with modern configuration
 
-- Each step can be implemented in 2-4 hours
-- Each step has clear testable outcomes
-- Dependencies are minimized between steps
-- Core functionality comes before polish
-- Each step adds immediate value
+### Modern Patterns
+- **Async where it helps**: External APIs, database I/O, webhooks
+- **Sync for simplicity**: Business logic, data processing, formatting
+- **Pydantic models**: Data validation and serialization
+- **Background tasks**: FastAPI background tasks for non-blocking operations
+- **Structured logging**: JSON logs with correlation IDs
+- **Circuit breakers**: Resilient external API calls
+- **Observability**: OpenTelemetry for monitoring
 
 ---
 
-## Code Generation Prompts
+## Updated Code Generation Prompts
 
-### Prompt 1: Database Foundation Setup
+### Prompt 1: Database Foundation
 
 ```text
-Create a Python module for Supabase database operations for a bookstore SMS chatbot.
+Create a modern database layer for a FastAPI bookstore SMS chatbot using SQLAlchemy and Pydantic.
 
 Requirements:
-1. Create a `database.py` module with a SupabaseClient class
-2. Implement connection management with connection pooling
-3. Create methods for CRUD operations on these tables:
+1. Create a `database.py` module with SQLAlchemy setup (async for I/O operations)
+2. Use Pydantic models for data validation and serialization
+3. Implement Alembic migrations for schema management
+4. Create these tables using SQLAlchemy models:
    - customers (id, phone, square_customer_id, preferences, created_at, updated_at)
    - conversations (id, customer_id, phone, messages, mentioned_books, last_activity, active)
    - books (id, isbn, title, author, publisher, metadata, created_at)
@@ -253,357 +206,151 @@ Requirements:
    - orders (id, customer_id, book_id, status, fulfillment_type, square_order_id, total_amount, created_at)
    - rate_limits (phone, message_count, window_start)
 
-4. Use environment variables for configuration (SUPABASE_URL, SUPABASE_SERVICE_KEY)
-5. Implement proper error handling and logging
-6. Create comprehensive unit tests using pytest
-7. Use type hints throughout
-8. Include docstrings for all methods
+5. Implement CRUD operations (async for database I/O, sync for data processing)
+6. Use connection pooling with asyncpg and Supabase
+7. Add comprehensive tests with pytest and pytest-asyncio
+8. Include proper logging with correlation IDs
+9. Use environment variables: SUPABASE_URL, SUPABASE_SERVICE_KEY
+10. Add type hints and docstrings throughout
 
-The module should handle connection failures gracefully and support async operations.
+Build on the existing FastAPI application structure we have.
 ```
 
-### Prompt 2: Flask Web Service Foundation
+### Prompt 2: SMS Webhook with Background Tasks
 
 ```text
-Create a Flask web application foundation for an SMS chatbot service.
+Extend the FastAPI application to handle SMS webhooks efficiently.
 
 Requirements:
-1. Create an `app.py` with Flask application factory pattern
-2. Implement configuration management from environment variables:
-   - PORT (default 8080)
-   - ENV (development/production)
-   - LOG_LEVEL
-   - All API keys as env vars (but don't use them yet)
-3. Create a health check endpoint at GET /health that returns:
-   - Status: "healthy"
-   - Timestamp
-   - Database connection status (use the SupabaseClient from previous step)
-4. Implement structured JSON logging with correlation IDs
-5. Add error handling middleware that:
-   - Catches all exceptions
-   - Logs errors with full context
-   - Returns appropriate HTTP status codes
-   - Never exposes internal errors to clients
-6. Create a basic test suite using pytest
-7. Include a requirements.txt with all dependencies
-8. Add Railway deployment configuration (railway.toml)
+1. Create `sms_handler.py` module with FastAPI dependency injection
+2. Add POST /webhook/sms endpoint using Pydantic models for validation
+3. Implement HMAC signature verification as FastAPI middleware
+4. Use FastAPI background tasks for non-blocking message processing
+5. Integrate with Redis for message queuing and rate limiting
+6. Create comprehensive Pydantic models for:
+   - Webhook payloads
+   - Message validation
+   - Response formats
+7. Add structured logging with correlation IDs
+8. Implement rate limiting with Redis sliding windows
+9. Create mock SMS provider for testing
+10. Use pytest and pytest-asyncio for comprehensive testing
+11. Environment variables: SMOBI_WEBHOOK_SECRET, REDIS_URL
+12. Add proper OpenTelemetry tracing
 
-Import and use the database module from the previous step.
+Build on the existing FastAPI app with database integration.
 ```
 
-### Prompt 3: SMS Webhook Handler
+### Prompt 3: Square Integration
 
 ```text
-Extend the Flask application to handle SMS webhook requests.
+Create a modern Square API integration with proper error handling and caching.
 
 Requirements:
-1. Create a new module `sms_handler.py` with webhook processing logic
-2. Add POST /webhook/sms endpoint that:
-   - Accepts JSON payload with: from, to, message, message_type, timestamp, signature
-   - Verifies webhook signature using HMAC-SHA256 (SMOBI_WEBHOOK_SECRET env var)
-   - Validates required fields
-   - Returns 200 OK immediately (async processing)
-3. Create a simple message queue using the database:
-   - Store incoming messages in conversations table
-   - Mark messages as "pending" for processing
-   - Include received timestamp
-4. Add a mock SMS sending function that logs responses for now
-5. Implement rate limiting check (10 messages/minute, 100/hour per phone)
-6. Create comprehensive tests including:
-   - Valid webhook requests
-   - Invalid signatures
-   - Missing fields
-   - Rate limit scenarios
-7. Update the health check to include webhook status
+1. Create `square_client.py` module using httpx (async for API calls)
+2. Implement Pydantic models for Square API requests/responses
+3. Add these methods:
+   - search_customer_by_phone(phone: str) -> Optional[CustomerModel]
+   - create_customer(customer_data: CreateCustomerModel) -> CustomerModel
+   - get_customer_orders(customer_id: str) -> List[OrderModel]
+4. Use Redis for customer data caching with TTL
+5. Implement circuit breaker pattern for resilient API calls
+6. Add comprehensive error handling with retry logic
+7. Use FastAPI background tasks for data synchronization
+8. Add proper logging with correlation IDs and metrics
+9. Create mock Square responses for testing
+10. Use pytest with proper fixtures (async tests where needed)
+11. Environment variables: SQUARE_ACCESS_TOKEN, SQUARE_APPLICATION_ID, SQUARE_ENVIRONMENT
+12. Add OpenTelemetry tracing for API calls
 
-Use the existing database module for all data operations.
+Integrate with existing database and FastAPI structure.
 ```
 
-### Prompt 4: Square Customer Integration
+### Prompt 4: Book Data Service
 
 ```text
-Create a Square API integration module for customer management.
+Create a modern book data service with intelligent caching and text processing.
 
 Requirements:
-1. Create `square_client.py` module with SquareClient class
-2. Implement these methods:
-   - search_customer_by_phone(phone: str) -> Optional[Customer]
-   - get_customer(customer_id: str) -> Optional[Customer]
-   - create_customer(phone: str, name: Optional[str]) -> Customer
-   - get_customer_orders(customer_id: str) -> List[Order]
-3. Add customer synchronization logic:
-   - Check local database first
-   - If not found, search Square
-   - Create local record with Square data
-   - Cache for 24 hours
-4. Handle Square API errors gracefully:
-   - Rate limiting with exponential backoff
-   - Network errors
-   - Invalid responses
-5. Create mock Square responses for testing
-6. Add integration to the SMS handler:
-   - Look up customer on each message
-   - Store customer_id in conversation
-7. Comprehensive test coverage
-8. Use environment variables: SQUARE_ACCESS_TOKEN, SQUARE_APPLICATION_ID, SQUARE_ENVIRONMENT
+1. Create `book_service.py` module with Hardcover API client (async for API calls)
+2. Implement Pydantic models for book data and inventory
+3. Add these methods:
+   - search_books(query: str, limit: int = 5) -> List[BookModel]
+   - get_book_details(book_id: str) -> Optional[BookModel]
+   - check_inventory(book_id: str) -> InventoryModel
+   - extract_book_mentions(text: str) -> List[BookReference]
+4. Use Redis for intelligent caching with proper invalidation
+5. Implement text processing for book matching (start simple, can add ML later)
+6. Add background tasks for inventory updates
+7. Create bookshop.org affiliate link generation
+8. Use httpx with proper timeout handling
+9. Add comprehensive error handling and fallback responses
+10. Create mock Hardcover API for testing
+11. Use pytest with realistic test data (async tests where needed)
+12. Environment variables: HARDCOVER_API_KEY, BOOKSHOP_AFFILIATE_ID
+13. Add OpenTelemetry metrics and tracing
 
-Integrate with existing database and SMS handler modules.
+Integrate with existing database and caching infrastructure.
 ```
 
-### Prompt 5: Book Data Service
+### Prompt 5: AI Integration
 
 ```text
-Create a book data service integrating Hardcover API and local inventory.
+Create a modern Claude AI integration with proper context management and background processing.
 
 Requirements:
-1. Create `book_service.py` module with BookService class
-2. Implement Hardcover API client:
-   - search_books(query: str, limit: int = 5) -> List[Book]
-   - get_book_details(book_id: str) -> Optional[Book]
-   - Handle API authentication with HARDCOVER_API_KEY
-3. Add inventory management:
-   - check_inventory(book_id: str) -> InventoryStatus
-   - update_inventory(book_id: str, count: int, source: str)
-   - get_availability(book_id: str) -> Dict (store vs bookshop.org)
-4. Create book data enrichment:
-   - Merge Hardcover data with local inventory
-   - Generate bookshop.org affiliate links
-   - Cache book data for 7 days
-5. Add book mention extraction:
-   - Extract ISBNs, titles, authors from text
-   - Track mentioned books in conversations
-6. Mock Hardcover API for testing
-7. Integration tests with database
-8. Error handling for API failures
+1. Create `ai_client.py` module with Claude client (async for API calls)
+2. Implement Pydantic models for AI requests and responses
+3. Add these methods:
+   - generate_response(context: ConversationContext) -> AIResponse
+   - build_system_prompt(customer: CustomerModel, context: Dict) -> str
+   - parse_ai_response(response: str) -> ParsedResponse
+4. Use background tasks for AI processing to avoid blocking webhooks
+5. Implement intelligent context window management
+6. Add response caching with Redis for similar queries
+7. Create fallback responses for AI failures
+8. Use structured logging with AI metrics
+9. Add proper timeout handling and circuit breakers
+10. Create mock Claude API for testing
+11. Use pytest with conversation scenarios (async tests where needed)
+12. Environment variables: CLAUDE_API_KEY, CLAUDE_MODEL
+13. Add OpenTelemetry tracing for AI calls
+14. Keep response processing simple initially
 
-Integrate with existing database module.
+Build on existing conversation management and caching infrastructure.
 ```
 
-### Prompt 6: Conversation State Manager
+### Prompt 6: Production Features with Monitoring
 
 ```text
-Create a conversation management system for maintaining chat context.
+Add comprehensive production features to the FastAPI application with modern observability.
 
 Requirements:
-1. Create `conversation_manager.py` module
-2. Implement ConversationManager class with:
-   - load_conversation(phone: str) -> Conversation
-   - add_message(phone: str, role: str, content: str)
-   - get_context(phone: str, max_messages: int = 10) -> List[Message]
-   - update_mentioned_books(phone: str, books: List[str])
-   - expire_inactive_conversations(timeout_hours: int = 3)
-3. Message storage format:
-   - Role: "customer" or "assistant"
-   - Content: message text
-   - Timestamp
-   - Metadata (mentioned books, intent flags)
-4. Context window management:
-   - Keep last 10 messages
-   - Summarize older messages if needed
-   - Track conversation state (active, expired)
-5. Book reference tracking:
-   - Extract book mentions from messages
-   - Maintain quick lookup for "that book" references
-   - Link to inventory checks
-6. Thread safety for concurrent messages
-7. Comprehensive tests for conversation flows
-8. Integration with SMS handler
-
-Use existing database module for persistence.
-```
-
-### Prompt 7: Claude AI Integration
-
-```text
-Create Claude API integration for generating responses.
-
-Requirements:
-1. Create `ai_client.py` module with ClaudeClient class
-2. Implement core methods:
-   - generate_response(message: str, context: Dict) -> str
-   - create_system_prompt(base_prompt: str, dynamic_context: Dict) -> str
-   - parse_response(response: str) -> ParsedResponse
-3. System prompt structure:
-   - Load base Marty prompt from file
-   - Inject dynamic context (customer info, history, inventory)
-   - Include current time and store status
-4. Response processing:
-   - Extract book references
-   - Detect purchase intent
-   - Identify required actions (search, order, etc.)
-5. Error handling:
-   - API timeouts (30 second limit)
-   - Rate limiting
-   - Fallback responses
-6. Message formatting:
-   - Split long responses for SMS
-   - Preserve Marty's personality
-   - Natural conversation breaks
-7. Mock Claude API for testing
-8. Integration with conversation manager
-9. Use CLAUDE_API_KEY from environment
-
-Test with various conversation scenarios.
-```
-
-### Prompt 8: Marty Personality Layer
-
-```text
-Implement Marty's personality and response processing system.
-
-Requirements:
-1. Create `marty_personality.py` module
-2. Load and process Marty's system prompt:
-   - Parse the markdown prompt file
-   - Build dynamic context injection
-   - Handle conversation state awareness
-3. Response personality features:
-   - Lowercase casual texting style
-   - Natural message breaking (2-3 messages)
-   - Wizard references when appropriate
-   - Error messages in character
-4. Context awareness:
-   - Reference customer purchase history naturally
-   - Remember books mentioned in conversation
-   - Time-based responses (store hours)
-   - Returning vs new customer detection
-5. Special response handlers:
-   - Book recommendations formatting
-   - Purchase flow responses
-   - Out of stock responses
-   - Error responses in character
-6. Message formatting rules:
-   - Max 150 chars for SMS
-   - Natural break points
-   - No special formatting
-7. Comprehensive personality tests
-8. Integration with AI client
-
-Build on the AI client from previous step.
-```
-
-### Prompt 9: Purchase Flow Implementation
-
-```text
-Implement the complete purchase flow from intent to order creation.
-
-Requirements:
-1. Create `purchase_flow.py` module
-2. Purchase intent detection:
-   - Identify phrases like "I'll take it", "buy that", etc.
-   - Resolve book references from conversation
-   - Confirm which book if multiple mentioned
-3. Fulfillment flow:
-   - Ask "ship it or picking up?"
-   - Handle shipping address collection
-   - Process pickup with payment options
-   - Create hold requests
-4. Square order creation:
-   - Build order with book details
-   - Generate payment links
-   - Handle different fulfillment types
-   - Update order status
-5. Inventory updates:
-   - Decrement store inventory
-   - Handle bookshop.org redirects
-   - Track order source
-6. Response generation:
-   - Natural conversation flow
-   - Clear next steps
-   - Payment link delivery
-7. Error handling:
-   - Payment failures
-   - Out of stock scenarios
-   - Address validation
-8. Integration with all previous modules
-9. End-to-end purchase tests
-
-This ties together Square, inventory, conversation, and AI modules.
-```
-
-### Prompt 10: Production Features
-
-```text
-Add production-ready features for monitoring, rate limiting, and error handling.
-
-Requirements:
-1. Create `production_utils.py` module
-2. Comprehensive rate limiting:
-   - Per-phone number limits (10/min, 100/hour)
-   - Global API rate limits
-   - Backoff strategies
-   - Database-backed tracking
-3. Advanced error handling:
-   - Catch all edge cases
-   - Personality-appropriate error messages
-   - Automatic retry logic
-   - Circuit breakers for external APIs
-4. Monitoring and metrics:
+1. Create `production_features.py` module with production utilities
+2. Implement Redis-based rate limiting with sliding windows
+3. Add comprehensive error handling with structured logging
+4. Create health check enhancements:
+   - Database connectivity
+   - Redis connectivity
+   - External API health
+   - System metrics
+5. Add OpenTelemetry integration:
+   - Distributed tracing
+   - Metrics collection
+   - Custom spans for business logic
+6. Implement graceful shutdown handling
+7. Add environment variable validation on startup
+8. Create middleware for:
+   - Request correlation IDs
    - Response time tracking
-   - API call success rates
-   - Conversation metrics
    - Error rate monitoring
-5. Performance optimizations:
-   - Connection pooling
-   - Response caching
-   - Async processing where beneficial
-   - Database query optimization
-6. Security enhancements:
-   - Input sanitization
-   - SQL injection prevention
-   - Rate limit bypass prevention
-7. Operational features:
-   - Graceful shutdown
-   - Health check improvements
-   - Debug mode for testing
-8. Configuration validation on startup
-9. Comprehensive integration tests
-10. Load testing scenarios
+9. Use pytest for production feature testing (async where needed)
+10. Add load testing scenarios with realistic data
+11. Create deployment configuration for Railway
+12. Add security enhancements:
+    - Input validation
+    - Rate limit bypass prevention
+    - CORS configuration
 
-This completes the production-ready system by enhancing all previous modules.
-```
-
-### Prompt 11: End-to-End Integration
-
-```text
-Create the final integration layer that wires all components together.
-
-Requirements:
-1. Update `app.py` to integrate all modules:
-   - Initialize all services on startup
-   - Wire dependencies correctly
-   - Set up background tasks
-2. Create `main_flow.py` that orchestrates:
-   - Receive SMS → Load customer → Process with AI → Send response
-   - Handle all edge cases
-   - Coordinate between all services
-3. Configuration management:
-   - Validate all environment variables
-   - Set appropriate defaults
-   - Environment-specific settings
-4. Background tasks:
-   - Conversation expiration
-   - Cache cleanup
-   - Metric collection
-5. Deployment readiness:
-   - Update requirements.txt with all dependencies
-   - Finalize railway.toml
-   - Add startup scripts
-   - Include migration scripts
-6. Comprehensive end-to-end tests:
-   - New customer full flow
-   - Returning customer with history
-   - Complete purchase flow
-   - Error scenarios
-   - Rate limiting behavior
-7. Demo data setup:
-   - Sample customers
-   - Book inventory
-   - Conversation history
-8. Documentation:
-   - API documentation
-   - Deployment guide
-   - Testing guide
-
-This creates the complete, production-ready Dungeon Books RCS Wizard system.
+Complete the production-ready FastAPI application with pragmatic patterns.
 ```
