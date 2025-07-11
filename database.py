@@ -4,6 +4,7 @@ Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 """
 
 import os
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -451,7 +452,7 @@ class InventoryResponse(BaseModel):
 
 
 # Database Session Management
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
     async with AsyncSessionLocal() as session:
         try:
