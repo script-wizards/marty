@@ -3,25 +3,108 @@
 import asyncio
 import json
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+import logging
 
 import httpx
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportError, TransportQueryError
 
 from config import config
+
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+class HardcoverAPIError(Exception):
+    """Base exception for Hardcover API errors."""
+
+    pass
+
+
+class HardcoverAuthError(HardcoverAPIError):
+    """Authentication/Authorization errors."""
+
+    pass
+
+
+class HardcoverRateLimitError(HardcoverAPIError):
+    """Rate limit exceeded (60 requests per minute)."""
+
+    pass
+
+
+class HardcoverTimeoutError(HardcoverAPIError):
+    """Query timeout exceeded (30 seconds max)."""
+
+    pass
+
+
+class RateLimiter:
+    """Simple rate limiter for API calls (60 requests per minute)."""
+
+    def __init__(self, max_requests: int = 60, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = []
+        self._lock = asyncio.Lock()
+
+    async def acquire(self):
+        """Wait if necessary to respect rate limits."""
+        async with self._lock:
+            now = datetime.now()
+            # Remove old requests outside the window
+            self.requests = [
+                req_time
+                for req_time in self.requests
+                if (now - req_time).total_seconds() < self.window_seconds
+            ]
+
+            if len(self.requests) >= self.max_requests:
+                # Calculate wait time
+                oldest_request = self.requests[0]
+                wait_time = self.window_seconds - (now - oldest_request).total_seconds()
+                if wait_time > 0:
+                    logger.warning(
+                        f"Rate limit reached, waiting {wait_time:.1f} seconds"
+                    )
+                    await asyncio.sleep(wait_time + 0.1)  # Add small buffer
+                    # Recursive call to re-check
+                    return await self.acquire()
+
+            # Add current request
+            self.requests.append(now)
 
 
 class HardcoverClient:
     """Asynchronous GraphQL client for Hardcover API."""
 
-    def __init__(self):
-        """Initialize the Hardcover client."""
+    def __init__(
+        self,
+        retry_count: int = 3,
+        retry_delay: float = 1.0,
+        rate_limit_max_requests: int = 60,
+    ):
+        """Initialize the Hardcover client.
+
+        Args:
+            retry_count: Number of retries for failed requests (default: 3)
+            retry_delay: Initial retry delay in seconds (default: 1.0)
+            rate_limit_max_requests: Max requests per minute (default: 60)
+        """
         if not config.HARDCOVER_API_TOKEN:
-            raise ValueError("Hardcover API token not configured")
+            raise HardcoverAuthError("Hardcover API token not configured")
 
         self.api_url = config.HARDCOVER_API_URL
         self.headers = config.get_hardcover_headers()
         self._client: Optional[Client] = None
+        self.rate_limiter = RateLimiter(
+            max_requests=rate_limit_max_requests, window_seconds=60
+        )
+        self._retry_count = retry_count
+        self._retry_delay = retry_delay
 
     async def _get_client(self) -> Client:
         """Get or create the GraphQL client."""
@@ -30,9 +113,67 @@ class HardcoverClient:
                 url=self.api_url,
                 headers=self.headers,
                 ssl=True,  # Enable SSL certificate verification for security
+                timeout=30,  # 30 second timeout as per API docs
             )
             self._client = Client(transport=transport, fetch_schema_from_transport=True)
         return self._client
+
+    async def _execute_with_retry(self, query, variables=None):
+        """Execute a GraphQL query with rate limiting and retry logic."""
+        # Apply rate limiting
+        await self.rate_limiter.acquire()
+
+        last_error = None
+        for attempt in range(self._retry_count):
+            try:
+                client = await self._get_client()
+                async with client as session:
+                    logger.debug(
+                        f"Executing query (attempt {attempt + 1}/{self._retry_count})"
+                    )
+                    result = await session.execute(query, variable_values=variables)
+                    return result
+
+            except TransportQueryError as e:
+                # GraphQL errors (like field not found)
+                logger.error(f"GraphQL query error: {e}")
+                raise HardcoverAPIError(f"GraphQL query error: {e}")
+
+            except TransportError as e:
+                # Transport errors (network, timeout, etc)
+                if "401" in str(e) or "403" in str(e):
+                    raise HardcoverAuthError(f"Authentication failed: {e}")
+                elif "429" in str(e):
+                    # Rate limit hit despite our limiter - wait longer
+                    wait_time = (
+                        self._retry_delay * (attempt + 1) * 10
+                    )  # Progressive backoff for rate limits
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds")
+                    await asyncio.sleep(wait_time)
+                    last_error = HardcoverRateLimitError(f"Rate limit exceeded: {e}")
+                elif "timeout" in str(e).lower():
+                    raise HardcoverTimeoutError(f"Query timeout (30s limit): {e}")
+                else:
+                    last_error = e
+                    if attempt < self._retry_count - 1:
+                        delay = self._retry_delay * (2**attempt)  # Exponential backoff
+                        logger.warning(f"Request failed, retrying in {delay}s: {e}")
+                        await asyncio.sleep(delay)
+
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                last_error = e
+                if attempt < self._retry_count - 1:
+                    delay = self._retry_delay * (2**attempt)
+                    await asyncio.sleep(delay)
+
+        # All retries failed
+        if isinstance(last_error, HardcoverAPIError):
+            raise last_error
+        else:
+            raise HardcoverAPIError(
+                f"Failed after {self._retry_count} attempts: {last_error}"
+            )
 
     async def introspect_schema(self) -> Dict[str, Any]:
         """Get the GraphQL schema for exploration."""
@@ -122,10 +263,8 @@ class HardcoverClient:
             }
         """)
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(introspection_query)
-            return result
+        logger.info("Introspecting GraphQL schema")
+        return await self._execute_with_retry(introspection_query)
 
     async def get_current_user(self) -> Dict[str, Any]:
         """Get current user information (test query)."""
@@ -139,10 +278,8 @@ class HardcoverClient:
             }
         """)
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(query)
-            return result
+        logger.info("Getting current user information")
+        return await self._execute_with_retry(query)
 
     async def search_books(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search for books using Hardcover's search API (optimized for production)."""
@@ -164,19 +301,18 @@ class HardcoverClient:
 
         variables = {"query": query, "limit": limit}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(search_query, variable_values=variables)
-            search_result = result.get("search", {})
+        logger.info(f"Searching books: query={query}, limit={limit}")
+        result = await self._execute_with_retry(search_query, variables)
+        search_result = result.get("search", {})
 
-            # If we got book IDs, fetch detailed info for them
-            book_ids = search_result.get("ids", [])
-            if book_ids:
-                # Limit to requested number of books
-                book_ids = book_ids[:limit]
-                return await self.get_books_by_ids(book_ids)
+        # If we got book IDs, fetch detailed info for them
+        book_ids = search_result.get("ids", [])
+        if book_ids:
+            # Limit to requested number of books
+            book_ids = book_ids[:limit]
+            return await self.get_books_by_ids(book_ids)
 
-            return []
+        return []
 
     async def search_books_raw(self, query: str, limit: int = 5) -> Dict[str, Any]:
         """Search for books and return raw search results (includes the huge results blob)."""
@@ -199,10 +335,9 @@ class HardcoverClient:
 
         variables = {"query": query, "limit": limit}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(search_query, variable_values=variables)
-            return result.get("search", {})
+        logger.info(f"Searching books (raw): query={query}, limit={limit}")
+        result = await self._execute_with_retry(search_query, variables)
+        return result.get("search", {})
 
     async def get_book_by_id(self, book_id: int) -> Optional[Dict[str, Any]]:
         """Get detailed book information by ID."""
@@ -237,10 +372,9 @@ class HardcoverClient:
 
         variables = {"id": book_id}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(query, variable_values=variables)
-            return result.get("books_by_pk")
+        logger.info(f"Getting book details: id={book_id}")
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books_by_pk")
 
     async def get_user_recommendations(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get personalized book recommendations for the authenticated user."""
@@ -265,10 +399,9 @@ class HardcoverClient:
 
         variables = {"limit": limit}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(query, variable_values=variables)
-            return result.get("recommendations", [])
+        logger.info(f"Getting user recommendations: limit={limit}")
+        result = await self._execute_with_retry(query, variables)
+        return result.get("recommendations", [])
 
     async def get_trending_books(
         self,
@@ -289,10 +422,11 @@ class HardcoverClient:
 
         variables = {"from": from_date, "to": to_date, "limit": limit, "offset": offset}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(query, variable_values=variables)
-            return result.get("books_trending", {})
+        logger.info(
+            f"Getting trending books: from={from_date}, to={to_date}, limit={limit}"
+        )
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books_trending", {})
 
     async def get_books_by_ids(self, book_ids: List[int]) -> List[Dict[str, Any]]:
         """Get detailed book information for multiple books by their IDs."""
@@ -327,10 +461,11 @@ class HardcoverClient:
 
         variables = {"ids": book_ids}
 
-        client = await self._get_client()
-        async with client as session:
-            result = await session.execute(query, variable_values=variables)
-            return result.get("books", [])
+        logger.info(
+            f"Getting books by IDs: ids={book_ids[:5]}{'...' if len(book_ids) > 5 else ''}"
+        )
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books", [])
 
     async def close(self):
         """Close the client connection."""

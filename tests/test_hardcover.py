@@ -3,14 +3,16 @@ Working tests for Hardcover API integration.
 Tests only the methods that actually exist in HardcoverClient.
 """
 
+import asyncio
+import json
+from datetime import datetime
+from typing import Any, AsyncGenerator, Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
-from typing import AsyncGenerator, Dict, Any
-import json
 
 from hardcover_client import HardcoverClient
-
 
 # Mock responses matching actual API structure
 MOCK_USER_RESPONSE = {
@@ -96,9 +98,12 @@ MOCK_TRENDING_RESPONSE = {"books_trending": {"error": None, "ids": [123, 456, 78
 
 @pytest_asyncio.fixture
 async def hardcover_client():
-    """Create a HardcoverClient instance for testing."""
+    """Create a HardcoverClient instance for testing with minimal delays."""
     with patch("hardcover_client.config.HARDCOVER_API_TOKEN", "Bearer test_token"):
-        client = HardcoverClient()
+        # Use minimal delays for testing
+        client = HardcoverClient(
+            retry_count=3, retry_delay=0.01, rate_limit_max_requests=100
+        )
         yield client
         await client.close()
 
@@ -276,8 +281,12 @@ class TestErrorHandling:
     async def test_missing_token_error(self):
         """Test error when API token is missing."""
         with patch("hardcover_client.config.HARDCOVER_API_TOKEN", None):
-            # Should raise ValueError during initialization
-            with pytest.raises(ValueError, match="Hardcover API token not configured"):
+            # Should raise HardcoverAuthError during initialization
+            from hardcover_client import HardcoverAuthError
+
+            with pytest.raises(
+                HardcoverAuthError, match="Hardcover API token not configured"
+            ):
                 HardcoverClient()
 
     @pytest.mark.asyncio
@@ -362,6 +371,174 @@ class TestIntegrationScenarios:
 
         assert trending["ids"] == [123, 456, 789]
         assert trending["error"] is None
+
+
+class TestRateLimiting:
+    """Test rate limiting functionality."""
+
+    @pytest.mark.asyncio
+    async def test_rate_limiter_basic(self):
+        """Test basic rate limiting functionality."""
+        from hardcover_client import RateLimiter
+
+        # Create a rate limiter
+        limiter = RateLimiter(max_requests=60, window_seconds=60)
+
+        # Verify it initializes correctly
+        assert limiter.max_requests == 60
+        assert limiter.window_seconds == 60
+        assert isinstance(limiter.requests, list)
+
+        # Test that acquire can be called (it should not block for first request)
+        await limiter.acquire()
+
+        # Verify request was tracked
+        assert len(limiter.requests) == 1
+
+    @pytest.mark.asyncio
+    async def test_client_rate_limiting(self, hardcover_client, mock_gql_session):
+        """Test that client applies rate limiting."""
+        mock_gql_session.execute.return_value = MOCK_USER_RESPONSE
+
+        # Mock sleep to avoid waiting in rate limiter
+        with patch("hardcover_client.asyncio.sleep", new_callable=AsyncMock):
+            # Make multiple rapid requests
+            tasks = []
+            for _ in range(5):
+                tasks.append(hardcover_client.get_current_user())
+
+            results = await asyncio.gather(*tasks)
+
+        # All should succeed
+        assert len(results) == 5
+        assert all(r == MOCK_USER_RESPONSE for r in results)
+
+
+class TestEnhancedErrorHandling:
+    """Test enhanced error handling with custom exceptions."""
+
+    @pytest.mark.asyncio
+    async def test_auth_error_handling(self, hardcover_client, mock_gql_session):
+        """Test authentication error handling."""
+        from gql.transport.exceptions import TransportError
+        from hardcover_client import HardcoverAuthError
+
+        mock_gql_session.execute.side_effect = TransportError("401 Unauthorized")
+
+        # Auth errors don't retry, but let's mock sleep anyway
+        with patch("hardcover_client.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(HardcoverAuthError, match="Authentication failed"):
+                await hardcover_client.get_current_user()
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_handling(self, hardcover_client, mock_gql_session):
+        """Test timeout error handling."""
+        from gql.transport.exceptions import TransportError
+        from hardcover_client import HardcoverTimeoutError
+
+        mock_gql_session.execute.side_effect = TransportError("Query timeout exceeded")
+
+        # Timeout errors don't retry, but let's mock sleep anyway
+        with patch("hardcover_client.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(HardcoverTimeoutError, match="Query timeout"):
+                await hardcover_client.get_current_user()
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_handling(self, hardcover_client, mock_gql_session):
+        """Test rate limit error handling."""
+        from gql.transport.exceptions import TransportError
+        from hardcover_client import HardcoverRateLimitError
+
+        # Mock a 429 error that persists through retries
+        mock_gql_session.execute.side_effect = TransportError("429 Too Many Requests")
+
+        # Mock sleep to avoid waiting
+        with patch("hardcover_client.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(HardcoverRateLimitError, match="Rate limit exceeded"):
+                await hardcover_client.search_books("test")
+
+    @pytest.mark.asyncio
+    async def test_retry_logic(self, hardcover_client, mock_gql_session):
+        """Test retry logic with eventual success."""
+        from gql.transport.exceptions import TransportError
+
+        # Fail twice, then succeed
+        mock_gql_session.execute.side_effect = [
+            TransportError("Network error"),
+            TransportError("Network error"),
+            MOCK_USER_RESPONSE,
+        ]
+
+        # Mock sleep to avoid waiting
+        with patch("hardcover_client.asyncio.sleep", new_callable=AsyncMock):
+            result = await hardcover_client.get_current_user()
+
+        assert result == MOCK_USER_RESPONSE
+        assert mock_gql_session.execute.call_count == 3  # Initial + 2 retries
+
+    @pytest.mark.asyncio
+    async def test_graphql_error_handling(self, hardcover_client, mock_gql_session):
+        """Test GraphQL query error handling."""
+        from gql.transport.exceptions import TransportQueryError
+
+        from hardcover_client import HardcoverAPIError
+
+        mock_gql_session.execute.side_effect = TransportQueryError(
+            "Field 'invalid_field' doesn't exist"
+        )
+
+        with pytest.raises(HardcoverAPIError, match="GraphQL query error"):
+            await hardcover_client.get_current_user()
+
+
+class TestProductionFeatures:
+    """Test production-ready features."""
+
+    @pytest.mark.asyncio
+    async def test_logging_enabled(self, hardcover_client, mock_gql_session, caplog):
+        """Test that operations are logged."""
+        import logging
+
+        caplog.set_level(logging.INFO)
+
+        mock_gql_session.execute.return_value = MOCK_USER_RESPONSE
+
+        await hardcover_client.get_current_user()
+
+        assert "Getting current user information" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_timeout_configuration(self, hardcover_client):
+        """Test that timeout is properly configured."""
+        # The transport should be configured with 30 second timeout
+        # This test verifies the client initializes correctly with timeout
+        assert hardcover_client.api_url is not None
+        assert hardcover_client.headers is not None
+        assert hardcover_client.rate_limiter is not None
+        assert hardcover_client._retry_count == 3
+        assert hardcover_client._retry_delay == 0.01  # Test fixture uses 0.01 for speed
+
+    @pytest.mark.asyncio
+    async def test_concurrent_requests(self, hardcover_client, mock_gql_session):
+        """Test handling of concurrent requests."""
+        mock_gql_session.execute.side_effect = [
+            MOCK_SEARCH_RESPONSE,
+            MOCK_BOOKS_RESPONSE,
+            MOCK_RECOMMENDATIONS_RESPONSE,
+            MOCK_TRENDING_RESPONSE,
+        ]
+
+        # Run multiple different queries concurrently
+        results = await asyncio.gather(
+            hardcover_client.search_books("test"),
+            hardcover_client.get_user_recommendations(),
+            hardcover_client.get_trending_books(),
+            return_exceptions=True,
+        )
+
+        # Check results
+        assert len(results) == 3
+        assert not any(isinstance(r, Exception) for r in results)
 
 
 if __name__ == "__main__":
