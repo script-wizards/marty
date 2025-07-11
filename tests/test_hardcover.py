@@ -268,13 +268,19 @@ class TestErrorHandling:
         self, hardcover_client: HardcoverClient, mock_gql_session
     ):
         """Test handling of GraphQL exceptions."""
-        mock_gql_session.execute.side_effect = Exception("GraphQL error")
+        from hardcover_client import HardcoverAPIError
 
-        # These should handle errors gracefully
-        with pytest.raises(Exception):
+        mock_gql_session.execute.side_effect = RuntimeError("GraphQL error")
+
+        # These should handle errors gracefully by converting to HardcoverAPIError
+        with pytest.raises(
+            HardcoverAPIError, match="Failed after 3 attempts: GraphQL error"
+        ):
             await hardcover_client.get_current_user()
 
-        with pytest.raises(Exception):
+        with pytest.raises(
+            HardcoverAPIError, match="Failed after 3 attempts: GraphQL error"
+        ):
             await hardcover_client.search_books("test")
 
     @pytest.mark.asyncio

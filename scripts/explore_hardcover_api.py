@@ -10,15 +10,21 @@ Usage:
    pip install httpx gql aiohttp
 
 3. Run the script:
-   python test_hardcover.py
+   python explore_hardcover_api.py
 """
 
 import asyncio
 import json
 import os
+import sys
 from typing import Any, Dict
 
+# Add parent directory to path to import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import httpx
+
+from config import config
 
 
 async def test_simple_request():
@@ -51,7 +57,7 @@ async def test_simple_request():
         try:
             print("🔍 Testing Hardcover API connection...")
             response = await client.post(
-                "https://api.hardcover.app/v1/graphql",
+                config.HARDCOVER_API_URL,
                 headers=headers,
                 json=test_query,
                 timeout=30.0,
@@ -127,7 +133,7 @@ async def explore_schema():
         try:
             print("\n🔍 Exploring GraphQL schema...")
             response = await client.post(
-                "https://api.hardcover.app/v1/graphql",
+                config.HARDCOVER_API_URL,
                 headers=headers,
                 json=introspection_query,
                 timeout=30.0,
@@ -266,7 +272,7 @@ async def test_book_search():
 
             try:
                 response = await client.post(
-                    "https://api.hardcover.app/v1/graphql",
+                    config.HARDCOVER_API_URL,
                     headers=headers,
                     json={"query": search_test["query"]},
                     timeout=30.0,
