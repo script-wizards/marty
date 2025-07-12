@@ -7,17 +7,18 @@ authors = [{ name = "Your Name", email = "your.email@example.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.104.0",
-    "hypercorn>=0.16.0",        # ASGI server with dual stack IPv4/IPv6 support
+    "hypercorn>=0.16.0", # ASGI server with dual stack IPv4/IPv6 support
     "sqlalchemy>=2.0.0",
     "alembic>=1.12.0",
-    "asyncpg>=0.29.0",          # for PostgreSQL async support
-    "aiosqlite>=0.19.0",        # for SQLite async support
+    "asyncpg>=0.29.0", # for PostgreSQL async support
+    "aiosqlite>=0.19.0", # for SQLite async support
     "pydantic>=2.4.0",
     "pydantic-settings>=2.0.0",
-    "python-multipart>=0.0.6",  # for form data
-    "httpx>=0.25.0",            # for HTTP requests to external APIs
-    "gql>=3.4.0",               # GraphQL client for Hardcover API
-    "aiohttp>=3.9.0",           # async HTTP for GraphQL transport
+    "python-multipart>=0.0.6", # for form data
+    "httpx>=0.25.0", # for HTTP requests to external APIs
+    "gql>=3.4.0", # GraphQL client for Hardcover API
+    "aiohttp>=3.9.0", # async HTTP for GraphQL transport
+    "greenlet>=3.2.3",
 ]
 
 [project.optional-dependencies]
@@ -85,5 +86,6 @@ dev = [
     "pre-commit>=4.2.0",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
+    "pytest-dotenv>=0.5.2",
     "ruff>=0.12.3",
 ]

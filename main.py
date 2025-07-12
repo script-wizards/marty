@@ -52,7 +52,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         db_status = "ok" if result.fetchone() else "error"
 
         # Get database URL info (without credentials)
-        db_url = os.getenv("DATABASE_URL", "sqlite:///./marty.db")
+        db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
         db_type = db_url.split("://")[0].split("+")[0] if "://" in db_url else "unknown"
 
         return {
