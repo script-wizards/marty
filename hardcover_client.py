@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
 from gql import Client, gql
@@ -175,7 +176,43 @@ class HardcoverClient:
             )
 
     async def introspect_schema(self) -> dict[str, Any]:
-        """Get the GraphQL schema for exploration."""
+        """Get the GraphQL schema for exploration.
+
+        This method executes a GraphQL introspection query to retrieve
+        the complete schema structure from the Hardcover API. The introspection query
+        is composed of several fragments that work together to provide detailed
+        information about the API's capabilities.
+
+        Query Structure:
+        - IntrospectionQuery: The main query that fetches the root schema information
+        - FullType fragment: Retrieves complete type information including:
+          * Fields with their arguments, types, and deprecation status
+          * Input fields for input types
+          * Interfaces implemented by the type
+          * Enum values with descriptions
+          * Possible types for union/interface types
+        - InputValue fragment: Describes input parameters and their types
+        - TypeRef fragment: Handles nested type references (up to 7 levels deep)
+          to support complex type structures like lists, non-nulls, and nested objects
+
+        The introspection provides information about:
+        - Available queries, mutations, and subscriptions
+        - All custom types (books, users, recommendations, etc.)
+        - Field arguments and return types
+        - Enum values and their descriptions
+        - Deprecated fields and their reasons
+        - Input types for mutations and query parameters
+
+        Returns:
+            dict: Complete GraphQL schema information including all types,
+                  fields, arguments, and metadata. This can be used for
+                  dynamic query building, API documentation, or debugging.
+
+        Raises:
+            HardcoverAPIError: If the introspection query fails
+            HardcoverAuthError: If authentication is required but invalid
+            HardcoverTimeoutError: If the query exceeds the 30-second timeout
+        """
         introspection_query = gql(
             """
             query IntrospectionQuery {
@@ -416,12 +453,24 @@ class HardcoverClient:
 
     async def get_trending_books(
         self,
-        from_date: str = "2025-04-01",
-        to_date: str = "2025-07-01",
+        from_date: str | None = None,
+        to_date: str | None = None,
         limit: int = 10,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Get currently trending/popular books for a date range."""
+        """Get currently trending/popular books for a date range.
+
+        Args:
+            from_date: Start date in YYYY-MM-DD format. Defaults to 3 months ago.
+            to_date: End date in YYYY-MM-DD format. Defaults to today.
+            limit: Maximum number of books to return (default: 10)
+            offset: Number of books to skip (default: 0)
+        """
+        # Use relative dates if not provided
+        if from_date is None:
+            from_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        if to_date is None:
+            to_date = datetime.now().strftime("%Y-%m-%d")
         query = gql(
             """
             query GetTrendingBooks($from: String!, $to: String!, $limit: Int!, $offset: Int!) {
