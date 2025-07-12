@@ -35,8 +35,7 @@ class CustomerCRUD:
         """Create a new customer."""
         db_customer = Customer(
             phone=customer.phone,
-            first_name=customer.first_name,
-            last_name=customer.last_name,
+            name=customer.name,
             email=customer.email,
             square_customer_id=customer.square_customer_id,
         )

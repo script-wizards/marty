@@ -1,9 +1,13 @@
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Initialize the Claude client
 client = AsyncAnthropic(
@@ -25,7 +29,7 @@ def load_system_prompt(prompt_file: str = "prompts/marty_system_prompt.md") -> s
         prompt_path = Path(__file__).parent / prompt_file
         return prompt_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
-        print(f"Warning: Prompt file {prompt_file} not found. Using fallback prompt.")
+        logger.warning(f"Prompt file {prompt_file} not found. Using fallback prompt.")
         return "You are Marty, a helpful AI assistant who works at Dungeon Books. Help customers find great books!"
 
 
@@ -64,13 +68,30 @@ async def generate_ai_response(
         system_prompt = MARTY_SYSTEM_PROMPT
         if customer_context:
             context_info = []
-            if customer_context.get("first_name"):
-                context_info.append(f"Customer name: {customer_context['first_name']}")
+
+            # Use name field - let Claude handle cultural sensitivity
+            if customer_context.get("name"):
+                context_info.append(f"Customer name: {customer_context['name']}")
+
             if customer_context.get("phone"):
                 context_info.append(f"Phone: {customer_context['phone']}")
+            if customer_context.get("customer_id"):
+                context_info.append(f"Customer ID: {customer_context['customer_id']}")
 
             if context_info:
                 system_prompt += f"\n\nCustomer Context:\n{' | '.join(context_info)}"
+
+            # Add current date/time context
+            time_context = []
+            if customer_context.get("current_time"):
+                time_context.append(f"Current time: {customer_context['current_time']}")
+            if customer_context.get("current_date"):
+                time_context.append(f"Current date: {customer_context['current_date']}")
+            if customer_context.get("current_day"):
+                time_context.append(f"Day of week: {customer_context['current_day']}")
+
+            if time_context:
+                system_prompt += f"\n\nCurrent Time & Date:\n{' | '.join(time_context)}"
 
         # Generate response with Claude
         response = await client.messages.create(
@@ -91,5 +112,5 @@ async def generate_ai_response(
         return response_text
 
     except Exception as e:
-        print(f"Error generating AI response: {e}")
+        logger.error(f"Error generating AI response: {e}")
         return "Sorry, I'm having trouble thinking right now. Can you try again? 🤔"

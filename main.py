@@ -111,8 +111,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         if not customer:
             customer_data = CustomerCreate(
                 phone=request.phone,
-                first_name=None,
-                last_name=None,
+                name=None,
                 email=None,
                 square_customer_id=None,
             )
@@ -154,8 +153,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             customer_context={
                 "customer_id": customer.id,
                 "phone": customer.phone,
-                "first_name": customer.first_name,
-                "last_name": customer.last_name,
+                "name": customer.name,
+                "current_time": datetime.now(UTC).isoformat(),
+                "current_date": datetime.now(UTC).strftime("%Y-%m-%d"),
+                "current_day": datetime.now(UTC).strftime("%A"),
             },
         )
 

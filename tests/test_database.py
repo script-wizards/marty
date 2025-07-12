@@ -73,8 +73,7 @@ async def sample_customer(db_session: AsyncSession) -> Customer:
     """Create a sample customer for testing."""
     customer_data = CustomerCreate(
         phone="+1234567890",
-        first_name="John",
-        last_name="Doe",
+        name="John Doe",
         email="john@example.com",
         square_customer_id="sq_123",
     )
@@ -121,17 +120,16 @@ class TestCustomerCRUD:
         """Test creating a new customer."""
         customer_data = CustomerCreate(
             phone="+1234567890",
-            first_name="Jane",
-            last_name="Smith",
+            name="Jane Smith",
             email="jane@example.com",
+            square_customer_id=None,
         )
 
         customer = await CustomerCRUD.create(db_session, customer_data)
 
         assert customer.id is not None
         assert customer.phone == "+1234567890"
-        assert customer.first_name == "Jane"
-        assert customer.last_name == "Smith"
+        assert customer.name == "Jane Smith"
         assert customer.email == "jane@example.com"
         assert customer.created_at is not None
         assert customer.updated_at is not None
@@ -176,18 +174,15 @@ class TestCustomerCRUD:
         self, db_session: AsyncSession, sample_customer: Customer
     ):
         """Test updating customer information."""
-        update_data = CustomerUpdate(first_name="Updated", email="updated@example.com")
+        update_data = CustomerUpdate(name="Updated Name", email="updated@example.com")
 
         updated_customer = await CustomerCRUD.update(
             db_session, sample_customer.id, update_data
         )
 
         assert updated_customer is not None
-        assert updated_customer.first_name == "Updated"
+        assert updated_customer.name == "Updated Name"
         assert updated_customer.email == "updated@example.com"
-        assert (
-            updated_customer.last_name == sample_customer.last_name
-        )  # Should remain unchanged
 
     @pytest.mark.asyncio
     async def test_delete_customer(

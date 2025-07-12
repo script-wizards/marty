@@ -45,11 +45,17 @@ class TestSystemPromptLoading:
 
     def test_load_system_prompt_file_not_found(self):
         """Test fallback when prompt file doesn't exist."""
-        prompt = load_system_prompt("nonexistent_file.txt")
+        with patch("ai_client.logger.warning") as mock_warning:
+            prompt = load_system_prompt("nonexistent_file.txt")
 
-        assert isinstance(prompt, str)
-        assert "Marty" in prompt  # Should contain fallback content
-        assert len(prompt) > 10  # Should not be empty
+            assert isinstance(prompt, str)
+            assert "Marty" in prompt  # Should contain fallback content
+            assert len(prompt) > 10  # Should not be empty
+
+            # Check that warning was logged instead of printed
+            mock_warning.assert_called_once()
+            assert "nonexistent_file.txt" in mock_warning.call_args[0][0]
+            assert "not found" in mock_warning.call_args[0][0]
 
     def test_marty_system_prompt_loaded(self):
         """Test that the global MARTY_SYSTEM_PROMPT is loaded correctly."""
@@ -147,7 +153,7 @@ class TestGenerateAIResponse:
     async def test_generate_ai_response_with_customer_context(self):
         """Test AI response generation with customer context."""
         customer_context = {
-            "first_name": "John",
+            "name": "John",
             "phone": "+1234567890",
             "customer_id": "123",
         }
@@ -169,19 +175,189 @@ class TestGenerateAIResponse:
             system_prompt = call_args[1]["system"]
             assert "Customer name: John" in system_prompt
             assert "Phone: +1234567890" in system_prompt
+            assert "Customer ID: 123" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_with_full_name(self):
+        """Test AI response generation with full customer name."""
+        customer_context = {
+            "name": "John Doe",
+            "phone": "+1234567890",
+            "customer_id": "456",
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [
+            MagicMock(text="hey John Doe! what can I help you with?")
+        ]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "hey John Doe! what can I help you with?"
+
+            # Check that full name is included in system prompt
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer name: John Doe" in system_prompt
+            assert "Phone: +1234567890" in system_prompt
+            assert "Customer ID: 456" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_with_cultural_name(self):
+        """Test AI response generation with culturally diverse names."""
+        customer_context = {
+            "name": "José García-López",
+            "phone": "+1234567890",
+            "customer_id": "789",
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="¡Hola José García-López!")]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "¡Hola José García-López!"
+
+            # Check that full name is passed to Claude for cultural handling
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer name: José García-López" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_single_name(self):
+        """Test AI response generation with single name (e.g., Madonna, Cher)."""
+        customer_context = {
+            "name": "Madonna",
+            "phone": "+1234567890",
+            "customer_id": "101",
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [
+            MagicMock(text="hey Madonna! what can I help you with?")
+        ]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "hey Madonna! what can I help you with?"
+
+            # Check that single name is handled correctly
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer name: Madonna" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_professional_name(self):
+        """Test AI response generation with professional/formal names."""
+        customer_context = {
+            "name": "Dr. John Smith MD",
+            "phone": "+1234567890",
+            "customer_id": "202",
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="hello Dr. Smith! how can I help?")]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "hello Dr. Smith! how can I help?"
+
+            # Check that the full professional name is included
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer name: Dr. John Smith MD" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_partial_context(self):
+        """Test AI response generation with partial customer context."""
+        customer_context = {
+            "name": "Jane",
+            "customer_id": "789",
+            # Missing phone
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="hey Jane! how can I help?")]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "hey Jane! how can I help?"
+
+            # Check that only available fields are included
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer name: Jane" in system_prompt
+            assert "Customer ID: 789" in system_prompt
+            assert "Phone:" not in system_prompt  # Should not include missing phone
+
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_minimal_context(self):
+        """Test AI response generation with minimal customer context."""
+        customer_context = {
+            "customer_id": "999",
+            # Only customer_id provided
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="hello! what are you looking for?")]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert response == "hello! what are you looking for?"
+
+            # Check that only customer_id is included
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Customer ID: 999" in system_prompt
+            assert "Customer name:" not in system_prompt
+            assert "Phone:" not in system_prompt
 
     @pytest.mark.asyncio
     async def test_generate_ai_response_api_error(self):
         """Test error handling when Claude API fails."""
         with patch(
             "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
+        ) as mock_create, patch("ai_client.logger.error") as mock_error:
             mock_create.side_effect = Exception("API Error")
 
             response = await generate_ai_response("Hello", [])
 
             assert "having trouble thinking" in response
             assert "🤔" in response
+
+            # Check that error was logged
+            mock_error.assert_called_once()
+            assert "API Error" in mock_error.call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_generate_ai_response_empty_content(self):
@@ -238,6 +414,40 @@ class TestGenerateAIResponse:
             assert len(call_args[1]["system"]) > 1000  # Should be substantial
             assert isinstance(call_args[1]["messages"], list)
 
+    @pytest.mark.asyncio
+    async def test_generate_ai_response_with_datetime_context(self):
+        """Test AI response generation with datetime context."""
+        customer_context = {
+            "name": "John",
+            "phone": "+1234567890",
+            "customer_id": "123",
+            "current_time": "2024-01-15T14:30:00Z",
+            "current_date": "2024-01-15",
+            "current_day": "Monday",
+        }
+
+        mock_response = MagicMock()
+        mock_response.content = [
+            MagicMock(text="hey John! it's Monday afternoon, what can I help you with?")
+        ]
+
+        with patch(
+            "ai_client.client.messages.create", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = await generate_ai_response("Hello", [], customer_context)
+
+            assert "Monday afternoon" in response
+
+            # Check that datetime context was added to system prompt
+            call_args = mock_create.call_args
+            system_prompt = call_args[1]["system"]
+            assert "Current time: 2024-01-15T14:30:00Z" in system_prompt
+            assert "Current date: 2024-01-15" in system_prompt
+            assert "Day of week: Monday" in system_prompt
+            assert "Customer name: John" in system_prompt
+
 
 class TestEnvironmentIntegration:
     """Test environment integration and configuration."""
@@ -282,7 +492,7 @@ class TestIntegrationScenarios:
             ),
         ]
 
-        customer_context = {"first_name": "Alice", "phone": "+1555123456"}
+        customer_context = {"name": "Alice", "phone": "+1555123456"}
 
         mock_response = MagicMock()
         mock_response.content = [

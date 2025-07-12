@@ -86,8 +86,7 @@ class Customer(Base):
     square_customer_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, nullable=True
     )
-    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -341,15 +340,13 @@ class RateLimit(Base):
 # Pydantic Schemas
 class CustomerCreate(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
-    first_name: str | None = Field(None, max_length=100)
-    last_name: str | None = Field(None, max_length=100)
+    name: str | None = Field(None, max_length=200)
     email: str | None = Field(None, max_length=255)
     square_customer_id: str | None = Field(None, max_length=100)
 
 
 class CustomerUpdate(BaseModel):
-    first_name: str | None = Field(None, max_length=100)
-    last_name: str | None = Field(None, max_length=100)
+    name: str | None = Field(None, max_length=200)
     email: str | None = Field(None, max_length=255)
     square_customer_id: str | None = Field(None, max_length=100)
 
@@ -359,8 +356,7 @@ class CustomerResponse(BaseModel):
 
     id: str
     phone: str
-    first_name: str | None = None
-    last_name: str | None = None
+    name: str | None = None
     email: str | None = None
     square_customer_id: str | None = None
     created_at: datetime
