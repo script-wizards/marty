@@ -86,8 +86,8 @@ class Customer(Base):
     square_customer_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, nullable=True
     )
-    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -178,11 +178,11 @@ class Book(Base):
     isbn: Mapped[str | None] = mapped_column(
         String(20), unique=True, nullable=True, index=True
     )
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    author: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     publication_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -191,7 +191,7 @@ class Book(Base):
     hardcover_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True
     )
-    bookshop_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    bookshop_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Metadata
     genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -340,14 +340,14 @@ class RateLimit(Base):
 # Pydantic Schemas
 class CustomerCreate(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
-    name: str | None = Field(None, max_length=200)
-    email: str | None = Field(None, max_length=255)
+    name: str | None = None
+    email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
 
 
 class CustomerUpdate(BaseModel):
-    name: str | None = Field(None, max_length=200)
-    email: str | None = Field(None, max_length=255)
+    name: str | None = None
+    email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
 
 
@@ -412,28 +412,28 @@ class MessageResponse(BaseModel):
 
 class BookCreate(BaseModel):
     isbn: str | None = Field(None, max_length=20)
-    title: str = Field(..., min_length=1, max_length=500)
-    author: str | None = Field(None, max_length=500)
+    title: str = Field(..., min_length=1)
+    author: str | None = None
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
-    publisher: str | None = Field(None, max_length=200)
+    publisher: str | None = None
     publication_date: datetime | None = None
     hardcover_id: str | None = Field(None, max_length=100)
-    bookshop_url: str | None = Field(None, max_length=500)
+    bookshop_url: str | None = None
     genre: str | None = Field(None, max_length=100)
     format: str | None = Field(None, max_length=50)
     page_count: int | None = Field(None, ge=0)
 
 
 class BookUpdate(BaseModel):
-    title: str | None = Field(None, min_length=1, max_length=500)
-    author: str | None = Field(None, max_length=500)
+    title: str | None = Field(None, min_length=1)
+    author: str | None = None
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
-    publisher: str | None = Field(None, max_length=200)
+    publisher: str | None = None
     publication_date: datetime | None = None
     hardcover_id: str | None = Field(None, max_length=100)
-    bookshop_url: str | None = Field(None, max_length=500)
+    bookshop_url: str | None = None
     genre: str | None = Field(None, max_length=100)
     format: str | None = Field(None, max_length=50)
     page_count: int | None = Field(None, ge=0)

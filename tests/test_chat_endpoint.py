@@ -11,45 +11,47 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from database import Base
+from database import Base, get_db
 from main import app
 
 # Test database configuration
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
+
+# Test database setup - ALWAYS use in-memory SQLite for tests
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    poolclass=StaticPool,
+    connect_args={"check_same_thread": False},
+)
+
+TestSessionLocal = async_sessionmaker(
+    test_engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
+async def get_test_db() -> AsyncGenerator[AsyncSession, None]:
+    """Override database dependency for tests."""
+    async with TestSessionLocal() as session:
+        yield session
+
+
+# Override the database dependency for ALL tests
+app.dependency_overrides[get_db] = get_test_db
+
 # Create test client
 client = TestClient(app)
 
 
-@pytest_asyncio.fixture
-async def test_engine():
-    """Create test database engine."""
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        echo=False,
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-
-    # Create tables
-    async with engine.begin() as conn:
+@pytest_asyncio.fixture(autouse=True)
+async def setup_test_db():
+    """Create test database tables before each test."""
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    yield engine
-
-    # Cleanup
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create test database session."""
-    async_session = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with async_session() as session:
-        yield session
+    yield
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 class TestChatEndpoint:
