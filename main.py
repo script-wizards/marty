@@ -4,10 +4,23 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import close_db, get_db, init_db
+from database import (
+    ConversationCreate,
+    CustomerCreate,
+    MessageCreate,
+    add_message,
+    close_db,
+    create_conversation,
+    create_customer,
+    get_active_conversation,
+    get_customer_by_phone,
+    get_db,
+    init_db,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -75,6 +88,70 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         ) from e
 
 
+# Chat endpoint for testing
+class ChatRequest(BaseModel):
+    message: str
+    phone: str
+
+
+class ChatResponse(BaseModel):
+    response: str
+    conversation_id: str
+    customer_id: str
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """Chat endpoint for testing conversations."""
+    try:
+        # Get or create customer
+        customer = await get_customer_by_phone(db, request.phone)
+        if not customer:
+            customer_data = CustomerCreate(
+                phone=request.phone,
+                first_name=None,
+                last_name=None,
+                email=None,
+                square_customer_id=None,
+            )
+            customer = await create_customer(db, customer_data)
+
+        # Get or create active conversation
+        conversation = await get_active_conversation(db, request.phone)
+        if not conversation:
+            conversation_data = ConversationCreate(
+                customer_id=customer.id, phone=request.phone
+            )
+            conversation = await create_conversation(db, conversation_data)
+
+        # Add incoming message
+        incoming_message = MessageCreate(
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=request.message,
+        )
+        await add_message(db, incoming_message)
+
+        # For now, just echo the message (we'll add AI later)
+        response_text = f"Echo: {request.message}"
+
+        # Add outgoing message
+        outgoing_message = MessageCreate(
+            conversation_id=conversation.id, direction="outbound", content=response_text
+        )
+        await add_message(db, outgoing_message)
+
+        return ChatResponse(
+            response=response_text,
+            conversation_id=conversation.id,
+            customer_id=customer.id,
+        )
+
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="Chat processing failed") from e
+
+
 if __name__ == "__main__":
     import hypercorn.asyncio
     from hypercorn.config import Config
@@ -85,4 +162,4 @@ if __name__ == "__main__":
 
     import asyncio
 
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+    asyncio.run(hypercorn.asyncio.serve(app, config))  # type: ignore

@@ -31,11 +31,46 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
 
 # SQLAlchemy setup
-engine = create_async_engine(DATABASE_URL, echo=True)
-AsyncSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
 Base = declarative_base()
+
+# Create engine and session factory (will be initialized when needed)
+engine = None
+AsyncSessionLocal = None
+
+
+def init_database():
+    """Initialize database engine and session factory."""
+    global engine, AsyncSessionLocal
+    if engine is None:
+        # Determine if we're using PostgreSQL/Supabase
+        is_postgres = DATABASE_URL.startswith(
+            ("postgresql://", "postgresql+asyncpg://")
+        )
+
+        if is_postgres:
+            # Supabase/PostgreSQL configuration
+            engine = create_async_engine(
+                DATABASE_URL,
+                echo=False,  # Set to True for debugging
+                pool_size=20,
+                max_overflow=0,
+                pool_pre_ping=True,
+                pool_recycle=300,  # 5 minutes
+                connect_args={
+                    "server_settings": {
+                        "jit": "off",  # Disable JIT for better connection stability
+                    }
+                },
+            )
+        else:
+            # SQLite configuration (for development)
+            engine = create_async_engine(
+                DATABASE_URL, echo=False, connect_args={"check_same_thread": False}
+            )
+
+        AsyncSessionLocal = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
 
 
 # SQLAlchemy Models
@@ -55,10 +90,10 @@ class Customer(Base):
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
@@ -82,10 +117,10 @@ class Conversation(Base):
         String(50), default="active"
     )  # active, ended, timeout
     last_message_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     # Store conversation context and metadata
@@ -115,7 +150,7 @@ class Message(Base):
     )  # inbound, outbound
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     # SMS/RCS metadata
@@ -149,7 +184,9 @@ class Book(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    publication_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    publication_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # External IDs
     hardcover_id: Mapped[str | None] = mapped_column(
@@ -165,10 +202,10 @@ class Book(Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
@@ -196,7 +233,7 @@ class Inventory(Base):
     # Availability
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     last_updated: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     # Relationships
@@ -240,10 +277,10 @@ class Order(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=func.now()
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=func.now()
     )
 
     # Relationships
@@ -287,8 +324,12 @@ class RateLimit(Base):
         String(50), nullable=False
     )  # sms, api, etc.
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
     # Efficient lookups
     __table_args__ = (
@@ -454,19 +495,221 @@ class InventoryResponse(BaseModel):
 # Database Session Management
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
+    init_database()  # Ensure database is initialized
+    assert AsyncSessionLocal is not None, "Database not initialized"
     async with AsyncSessionLocal() as session:
         try:
             yield session
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             await session.close()
 
 
 async def init_db():
     """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    init_database()  # Ensure database is initialized
+    assert engine is not None, "Database engine not initialized"
+
+    # Test connection first
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Database tables created successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize database: {e}")
+        raise
+
+
+async def test_db_connection():
+    """Test database connection and return status."""
+    try:
+        init_database()
+        assert engine is not None, "Database engine not initialized"
+
+        async with engine.begin() as conn:
+            result = await conn.execute(func.now())
+            timestamp = result.scalar()
+            print(f"✅ Database connection successful. Server time: {timestamp}")
+            return True
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
+        return False
 
 
 async def close_db():
     """Close database connections."""
-    await engine.dispose()
+    if engine is not None:
+        await engine.dispose()
+        print("✅ Database connections closed")
+
+
+# Supabase-specific utilities
+def is_supabase_url(url: str) -> bool:
+    """Check if the database URL is for Supabase."""
+    return "supabase.co" in url
+
+
+def get_supabase_project_ref(url: str) -> str | None:
+    """Extract Supabase project reference from URL."""
+    if not is_supabase_url(url):
+        return None
+
+    # Extract project ref from URL like: db.abcdefgh12345678.supabase.co
+    try:
+        parts = url.split("@")[1].split(".supabase.co")[0]
+        return parts.split("db.")[1]
+    except (IndexError, AttributeError):
+        return None
+
+
+# Enhanced CRUD Operations with better error handling
+async def create_customer(db: AsyncSession, customer: CustomerCreate) -> Customer:
+    """Create a new customer."""
+    try:
+        db_customer = Customer(**customer.model_dump())
+        db.add(db_customer)
+        await db.commit()
+        await db.refresh(db_customer)
+        return db_customer
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+
+async def get_customer_by_phone(db: AsyncSession, phone: str) -> Customer | None:
+    """Get customer by phone number."""
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(select(Customer).where(Customer.phone == phone))
+        return result.scalars().first()
+    except Exception as e:
+        print(f"Error fetching customer by phone {phone}: {e}")
+        return None
+
+
+async def create_conversation(
+    db: AsyncSession, conversation: ConversationCreate
+) -> Conversation:
+    """Create a new conversation."""
+    try:
+        db_conversation = Conversation(**conversation.model_dump())
+        db.add(db_conversation)
+        await db.commit()
+        await db.refresh(db_conversation)
+        return db_conversation
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+
+async def get_active_conversation(db: AsyncSession, phone: str) -> Conversation | None:
+    """Get active conversation for a phone number."""
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(Conversation)
+            .where(Conversation.phone == phone)
+            .where(Conversation.status == "active")
+            .order_by(Conversation.created_at.desc())
+        )
+        return result.scalars().first()
+    except Exception as e:
+        print(f"Error fetching active conversation for phone {phone}: {e}")
+        return None
+
+
+async def add_message(db: AsyncSession, message: MessageCreate) -> Message:
+    """Add a message to a conversation."""
+    try:
+        db_message = Message(**message.model_dump())
+        db.add(db_message)
+
+        # Update conversation's last_message_at
+        from sqlalchemy import update
+
+        await db.execute(
+            update(Conversation)
+            .where(Conversation.id == message.conversation_id)
+            .values(last_message_at=datetime.now(UTC))
+        )
+
+        await db.commit()
+        await db.refresh(db_message)
+        return db_message
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+
+async def get_conversation_messages(
+    db: AsyncSession, conversation_id: str, limit: int = 10
+) -> list[Message]:
+    """Get recent messages from a conversation."""
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.timestamp.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    except Exception as e:
+        print(f"Error fetching messages for conversation {conversation_id}: {e}")
+        return []
+
+
+async def search_books(db: AsyncSession, query: str, limit: int = 10) -> list[Book]:
+    """Search books by title or author."""
+    try:
+        from sqlalchemy import or_, select
+
+        result = await db.execute(
+            select(Book)
+            .where(or_(Book.title.ilike(f"%{query}%"), Book.author.ilike(f"%{query}%")))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    except Exception as e:
+        print(f"Error searching books with query '{query}': {e}")
+        return []
+
+
+# Main function for testing
+async def main():
+    """Test database connection and setup."""
+    print("🔍 Testing Marty Database Connection...")
+
+    # Show current database URL (masked for security)
+    db_url = DATABASE_URL
+    if "supabase.co" in db_url:
+        # Mask the password
+        masked_url = db_url.split("://")[0] + "://postgres:***@" + db_url.split("@")[1]
+        print(f"📋 Database URL: {masked_url}")
+        print(f"🏗️  Supabase Project: {get_supabase_project_ref(db_url)}")
+    else:
+        print(f"📋 Database URL: {db_url}")
+
+    # Test connection
+    success = await test_db_connection()
+
+    if success:
+        print("🚀 Initializing database tables...")
+        await init_db()
+        print("✅ Database setup complete!")
+    else:
+        print("❌ Database setup failed!")
+        return False
+
+    return True
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

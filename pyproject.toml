@@ -19,6 +19,7 @@ dependencies = [
     "gql>=3.4.0", # GraphQL client for Hardcover API
     "aiohttp>=3.9.0", # async HTTP for GraphQL transport
     "greenlet>=3.2.3",
+    "psycopg2-binary>=2.9.10",
 ]
 
 [project.optional-dependencies]
