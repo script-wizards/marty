@@ -2,144 +2,312 @@
 """
 Terminal chat interface to interact with Marty.
 Quick way to test the AI without going through the full SMS pipeline.
+
+FOR INTERNAL DEVELOPER TESTING ONLY - NOT FOR PRODUCTION USE
 """
 
 import asyncio
+import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
+import colorama
+from colorama import Fore, Style
 from dotenv import load_dotenv
+
+# Initialize colorama for cross-platform color support
+colorama.init()
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(PROJECT_ROOT / "logs" / "chat_with_marty.log"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ChatConfig:
+    """Configuration for the chat interface."""
+
+    max_history_length: int = 20
+    api_key_env_var: str = "ANTHROPIC_API_KEY"
+    default_customer_name: str = "Terminal User"
+    default_phone: str = "+1555000000"
+    default_customer_id: str = "test_user"
+    commands: dict[str, str] = field(
+        default_factory=lambda: {
+            "quit": "Exit the chat",
+            "exit": "Exit the chat",
+            "clear": "Clear conversation history",
+            "context": "Show current context",
+            "help": "Show available commands",
+            "save": "Save conversation history",
+            "load": "Load conversation history",
+        }
+    )
+
+
+class ChatError(Exception):
+    """Base exception for chat-related errors."""
+
+    pass
+
+
+class APIKeyError(ChatError):
+    """Raised when API key is missing or invalid."""
+
+    pass
 
 
 class MartyChat:
-    """Simple terminal chat interface for Marty."""
+    """Enhanced terminal chat interface for Marty."""
 
-    def __init__(self):
-        self.conversation_history = []
-        self.customer_context = {
-            "name": "Terminal User",
-            "phone": "+1555000000",
-            "customer_id": "test_user",
-            "current_time": datetime.now(UTC).isoformat(),
-            "current_date": datetime.now(UTC).strftime("%Y-%m-%d"),
-            "current_day": datetime.now(UTC).strftime("%A"),
+    def __init__(self, config: ChatConfig | None = None):
+        self.config = config or ChatConfig()
+        self.conversation_history: list[Any] = []
+        self.customer_context = self._initialize_context()
+        self._setup_logging()
+
+    def _initialize_context(self) -> dict[str, Any]:
+        """Initialize customer context with current time information."""
+        now = datetime.now(UTC)
+        return {
+            "name": self.config.default_customer_name,
+            "phone": self.config.default_phone,
+            "customer_id": self.config.default_customer_id,
+            "current_time": now.isoformat(),
+            "current_date": now.strftime("%Y-%m-%d"),
+            "current_day": now.strftime("%A"),
         }
 
-    async def start_chat(self):
+    def _setup_logging(self) -> None:
+        """Setup logging directory if it doesn't exist."""
+        log_dir = PROJECT_ROOT / "logs"
+        log_dir.mkdir(exist_ok=True)
+
+    def _update_time_context(self) -> None:
+        """Update time-related context fields."""
+        now = datetime.now(UTC)
+        self.customer_context.update(
+            {
+                "current_time": now.isoformat(),
+                "current_date": now.strftime("%Y-%m-%d"),
+                "current_day": now.strftime("%A"),
+            }
+        )
+
+    def _print_banner(self) -> None:
+        """Print the chat banner."""
+        banner = f"""
+{Fore.CYAN}🧙 Marty Terminal Chat{Style.RESET_ALL}
+{Fore.CYAN}{'=' * 40}{Style.RESET_ALL}
+{Fore.YELLOW}Commands:{Style.RESET_ALL}
+"""
+        for cmd, desc in self.config.commands.items():
+            banner += f"  {Fore.GREEN}{cmd}{Style.RESET_ALL}: {desc}\n"
+        banner += f"{Fore.CYAN}{'=' * 40}{Style.RESET_ALL}"
+        print(banner)
+
+    def _print_context(self) -> None:
+        """Print current context information."""
+        print(f"\n{Fore.BLUE}📋 Current Context:{Style.RESET_ALL}")
+        for key, value in self.customer_context.items():
+            print(f"  {Fore.CYAN}{key}{Style.RESET_ALL}: {value}")
+
+    def _print_help(self) -> None:
+        """Print help information."""
+        print(f"\n{Fore.BLUE}📖 Available Commands:{Style.RESET_ALL}")
+        for cmd, desc in self.config.commands.items():
+            print(f"  {Fore.GREEN}{cmd}{Style.RESET_ALL}: {desc}")
+
+    def _validate_api_key(self) -> None:
+        """Validate that the API key is available."""
+        if not os.getenv(self.config.api_key_env_var):
+            raise APIKeyError(
+                f"❌ {self.config.api_key_env_var} not found in environment\n"
+                f"Please set your Claude API key in .env file"
+            )
+
+    def _add_to_history(
+        self, role: str, content: str, timestamp: datetime | None = None
+    ) -> None:
+        """Add a message to conversation history."""
+        from ai_client import ConversationMessage
+
+        if timestamp is None:
+            timestamp = datetime.now(UTC)
+
+        self.conversation_history.append(
+            ConversationMessage(role=role, content=content, timestamp=timestamp)
+        )
+
+        # Trim history if it gets too long
+        if len(self.conversation_history) > self.config.max_history_length:
+            self.conversation_history = self.conversation_history[
+                -self.config.max_history_length :
+            ]
+
+    def _handle_command(self, command: str) -> bool:
+        """Handle special commands. Returns True if command was handled."""
+        command_lower = command.lower()
+
+        if command_lower in ["quit", "exit"]:
+            print(f"\n{Fore.YELLOW}👋 Goodbye!{Style.RESET_ALL}")
+            return True
+
+        if command_lower == "clear":
+            self.conversation_history = []
+            print(f"\n{Fore.GREEN}🧹 Conversation history cleared!{Style.RESET_ALL}")
+            return False
+
+        if command_lower == "context":
+            self._print_context()
+            return False
+
+        if command_lower == "help":
+            self._print_help()
+            return False
+
+        if command_lower == "save":
+            # TODO: Implement save functionality
+            print(
+                f"\n{Fore.YELLOW}💾 Save functionality not implemented yet{Style.RESET_ALL}"
+            )
+            return False
+
+        if command_lower == "load":
+            # TODO: Implement load functionality
+            print(
+                f"\n{Fore.YELLOW}📁 Load functionality not implemented yet{Style.RESET_ALL}"
+            )
+            return False
+
+        return False
+
+    async def _get_initial_response(self) -> str:
+        """Get Marty's initial greeting."""
+        from ai_client import generate_ai_response
+
+        try:
+            response = await generate_ai_response(
+                user_message="hello",
+                conversation_history=[],
+                customer_context=self.customer_context,
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Failed to get initial response: {e}")
+            raise ChatError(f"Failed to get initial response: {e}") from e
+
+    async def _get_ai_response(self, user_input: str) -> str:
+        """Get AI response for user input."""
+        from ai_client import generate_ai_response
+
+        try:
+            response = await generate_ai_response(
+                user_message=user_input,
+                conversation_history=self.conversation_history,
+                customer_context=self.customer_context,
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Failed to get AI response: {e}")
+            raise ChatError(f"Failed to get AI response: {e}") from e
+
+    async def start_chat(self) -> None:
         """Start the interactive chat session."""
-        # Import after path setup
-        from ai_client import ConversationMessage, generate_ai_response
+        try:
+            # Import after path setup
 
-        print("🧙 Marty Terminal Chat")
-        print("=" * 40)
-        print("Type 'quit' or 'exit' to end the chat")
-        print("Type 'clear' to clear conversation history")
-        print("Type 'context' to see current context")
-        print("=" * 40)
+            self._print_banner()
+            self._validate_api_key()
 
-        # Check API key
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            print("❌ ANTHROPIC_API_KEY not found in environment")
-            print("Please set your Claude API key in .env file")
+            # Get initial response
+            print(f"\n{Fore.MAGENTA}🤔 Marty is thinking...{Style.RESET_ALL}")
+            initial_response = await self._get_initial_response()
+            print(f"\n{Fore.BLUE}🤖 Marty:{Style.RESET_ALL} {initial_response}")
+
+            # Add initial greeting to history
+            self._add_to_history("user", "hello")
+            self._add_to_history("assistant", initial_response)
+
+            # Main chat loop
+            while True:
+                try:
+                    user_input = input(
+                        f"\n{Fore.GREEN}👤 You:{Style.RESET_ALL} "
+                    ).strip()
+
+                    if not user_input:
+                        continue
+
+                    # Handle commands
+                    if self._handle_command(user_input):
+                        break
+
+                    # Update time context
+                    self._update_time_context()
+
+                    # Get AI response
+                    print(f"\n{Fore.MAGENTA}🤔 Marty is thinking...{Style.RESET_ALL}")
+                    response = await self._get_ai_response(user_input)
+
+                    # Add to history
+                    self._add_to_history("user", user_input)
+                    self._add_to_history("assistant", response)
+
+                    print(f"\n{Fore.BLUE}🤖 Marty:{Style.RESET_ALL} {response}")
+
+                except KeyboardInterrupt:
+                    print(f"\n\n{Fore.YELLOW}👋 Goodbye!{Style.RESET_ALL}")
+                    break
+                except ChatError as e:
+                    print(f"\n{Fore.RED}❌ Chat Error: {e}{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.YELLOW}Try again or type 'quit' to exit{Style.RESET_ALL}"
+                    )
+                except Exception as e:
+                    logger.error(f"Unexpected error in chat loop: {e}")
+                    print(f"\n{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.YELLOW}Try again or type 'quit' to exit{Style.RESET_ALL}"
+                    )
+
+        except APIKeyError as e:
+            print(f"\n{Fore.RED}{e}{Style.RESET_ALL}")
+            return
+        except Exception as e:
+            logger.error(f"Failed to start chat: {e}")
+            print(f"\n{Fore.RED}❌ Failed to start chat: {e}{Style.RESET_ALL}")
             return
 
-        # Start with Marty's natural greeting using the system prompt
-        print("\n🤔 Marty is thinking...")
-        initial_response = await generate_ai_response(
-            user_message="hello",
-            conversation_history=[],
-            customer_context=self.customer_context,
-        )
-        print(f"\n🤖 Marty: {initial_response}")
 
-        # Add initial greeting to history
-        now = datetime.now(UTC)
-        self.conversation_history.append(
-            ConversationMessage(role="user", content="hello", timestamp=now)
-        )
-        self.conversation_history.append(
-            ConversationMessage(
-                role="assistant", content=initial_response, timestamp=now
-            )
-        )
-
-        while True:
-            try:
-                # Get user input
-                user_input = input("\n👤 You: ").strip()
-
-                if not user_input:
-                    continue
-
-                # Handle special commands
-                if user_input.lower() in ["quit", "exit"]:
-                    print("\n👋 Goodbye!")
-                    break
-
-                if user_input.lower() == "clear":
-                    self.conversation_history = []
-                    print("\n🧹 Conversation history cleared!")
-                    continue
-
-                if user_input.lower() == "context":
-                    print("\n📋 Current Context:")
-                    for key, value in self.customer_context.items():
-                        print(f"  {key}: {value}")
-                    continue
-
-                # Update time context for each message
-                now = datetime.now(UTC)
-                self.customer_context.update(
-                    {
-                        "current_time": now.isoformat(),
-                        "current_date": now.strftime("%Y-%m-%d"),
-                        "current_day": now.strftime("%A"),
-                    }
-                )
-
-                # Generate AI response
-                print("\n🤔 Marty is thinking...")
-                response = await generate_ai_response(
-                    user_message=user_input,
-                    conversation_history=self.conversation_history,
-                    customer_context=self.customer_context,
-                )
-
-                # Add to conversation history
-                self.conversation_history.append(
-                    ConversationMessage(role="user", content=user_input, timestamp=now)
-                )
-                self.conversation_history.append(
-                    ConversationMessage(
-                        role="assistant", content=response, timestamp=datetime.now(UTC)
-                    )
-                )
-
-                # Keep history reasonable (last 10 messages)
-                if len(self.conversation_history) > 10:
-                    self.conversation_history = self.conversation_history[-10:]
-
-                print(f"\n🤖 Marty: {response}")
-
-            except KeyboardInterrupt:
-                print("\n\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"\n❌ Error: {e}")
-                print("Try again or type 'quit' to exit")
-
-
-async def main():
+async def main() -> None:
     """Main entry point."""
-    chat = MartyChat()
-    await chat.start_chat()
+    try:
+        config = ChatConfig()
+        chat = MartyChat(config)
+        await chat.start_chat()
+    except Exception as e:
+        logger.error(f"Failed to run chat: {e}")
+        print(f"{Fore.RED}❌ Failed to run chat: {e}{Style.RESET_ALL}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
