@@ -1,187 +1,294 @@
-# Marty - SMS Bookstore Chatbot 🤖📚
+# Marty - AI Bookstore Chatbot
 
-AI-powered SMS chatbot for book recommendations and store management.
+an ai chatbot that recommends books via text. powered by claude ai.
 
-## Features
+marty is a burnt-out wizard who used to do software engineering and now works at dungeon books. he's genuinely magical but completely casual about it.
 
-- 📱 SMS-based book recommendations
-- 📖 Integration with Hardcover API for book data
-- 🛒 Order management and inventory tracking
-- 💬 Conversation history and context
-- 🔍 Smart book search and recommendations
+## What It Does
 
-## Quick Start
+- chat with customers about books
+- give book recommendations using claude ai
+- remember conversation history
+- integrate with hardcover api for book data
+- handle customer info and orders (eventually)
+- send responses that sound like a real person texting
 
-### 1. Database Setup
+## Tech Stack
 
-#### Option A: Supabase (Recommended for Production)
+- python 3.13+
+- fastapi with async support
+- hypercorn asgi server (dual-stack ipv4/ipv6)
+- claude ai for conversations
+- postgresql with sqlalchemy
+- hardcover api for book data
+- pytest for testing
+- ruff for code quality
+- uv for dependency management
 
-1. **Create a Supabase project:**
-   - Go to [supabase.com](https://supabase.com)
-   - Create a new project
-   - Note your project URL and password
+## Requirements
 
-2. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   ```
+- python 3.13+
+- uv (for dependency management)
+- postgresql database (supabase recommended)
+- anthropic api key
+- hardcover api token
 
-   Edit `.env` and set:
-   ```
-   DATABASE_URL=postgresql+asyncpg://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
-   ```
+## Setup
 
-3. **Initialize the database:**
-
-   For development/testing:
-   ```bash
-   python database.py
-   ```
-
-   For production (recommended):
-   ```bash
-   alembic upgrade head
-   ```
-
-   **Note**: Using `python database.py` creates tables directly and bypasses Alembic migrations. For production environments, always use `alembic upgrade head` to ensure migrations are applied consistently.
-
-#### Option B: SQLite (Development)
-
-For local development, you can use SQLite:
+### Install Dependencies
 ```bash
+# install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# clone repository
+git clone <repository-url>
+cd marty
+
+# create virtual environment and install dependencies
+uv sync
+```
+
+### Environment Setup
+```bash
+cp .env.example .env
+# edit .env with your actual credentials
+```
+
+required environment variables:
+```
+DATABASE_URL=postgresql+asyncpg://user:password@host:5432/dbname
+ANTHROPIC_API_KEY=your_claude_api_key_here
+HARDCOVER_API_TOKEN=Bearer your_hardcover_token_here
+```
+
+### Database Setup
+
+production (supabase):
+```bash
+# apply migrations
+alembic upgrade head
+```
+
+local development (sqlite):
+```bash
+# set sqlite in .env
 DATABASE_URL=sqlite+aiosqlite:///./marty.db
+
+# apply migrations
+alembic upgrade head
 ```
 
-### 2. Test Database Connection
-
-Run the database test script:
+### Verify Setup
 ```bash
+# test database connection
 python database.py
+
+# test claude integration
+python scripts/smoke_test.py
 ```
 
-**Note**: This script tests the connection and creates tables. For production deployments, use `alembic upgrade head` instead.
-
-You should see output like:
-```
-🔍 Testing Marty Database Connection...
-📋 Database URL: postgresql+asyncpg://postgres:***@db.your-project.supabase.co:5432/postgres
-🏗️  Supabase Project: your-project-ref
-✅ Database connection successful. Server time: 2024-01-01 12:00:00
-🚀 Initializing database tables...
-✅ Database tables created successfully
-✅ Database setup complete!
-```
-
-### 3. Configure External Services
-
-Edit your `.env` file with:
-
-```env
-# Hardcover API (for book data)
-HARDCOVER_API_TOKEN=Bearer your_token_here
-
-# Sinch SMS (for messaging)
-SINCH_SERVICE_PLAN_ID=your_service_plan_id
-SINCH_API_TOKEN=your_api_token
-
-# Optional: Bookshop affiliate
-BOOKSHOP_AFFILIATE_ID=your_affiliate_id
-```
-
-### 4. Run the Application
-
+### Run Application
 ```bash
 python main.py
 ```
 
-## Database Schema
+server runs on http://localhost:8000 with dual-stack ipv4/ipv6 binding
 
-The application uses the following main tables:
+## API Endpoints
 
-- **customers** - Customer information and phone numbers
-- **conversations** - SMS conversation threads
-- **messages** - Individual SMS messages
-- **books** - Book catalog with metadata
-- **inventory** - Stock levels and availability
-- **orders** - Purchase orders and fulfillment
-- **order_items** - Individual items in orders
+### Health Check
+```
+GET /health
+```
 
-## Supabase Configuration
+returns database connectivity and system status
 
-### Connection Pooling
+### Chat Interface
+```
+POST /chat
+```
 
-The application is configured with optimal connection pooling for Supabase:
+request:
+```json
+{
+  "message": "looking for a good fantasy book",
+  "phone": "+1234567890"
+}
+```
 
-- **Pool size**: 20 connections
-- **Pool recycle**: 5 minutes
-- **Pre-ping**: Enabled for connection health checks
-- **JIT disabled**: For better connection stability
-
-### Performance Optimizations
-
-- Async PostgreSQL driver (`asyncpg`)
-- Proper indexing on frequently queried columns
-- Connection pooling with health checks
-- Automatic rollback on errors
-
-### Monitoring
-
-Use the built-in database utilities:
-
-```python
-from database import test_db_connection, is_supabase_url, get_supabase_project_ref
-
-# Test connection
-await test_db_connection()
-
-# Check if using Supabase
-if is_supabase_url(DATABASE_URL):
-    project_ref = get_supabase_project_ref(DATABASE_URL)
-    print(f"Supabase project: {project_ref}")
+response:
+```json
+{
+  "response": "try the name of the wind by rothfuss, really solid fantasy. good worldbuilding and the magic system is interesting",
+  "conversation_id": "uuid",
+  "customer_id": "uuid"
+}
 ```
 
 ## Development
 
-### Database Migrations
-
-The application uses Alembic for database migrations:
-
+### Interactive Testing
 ```bash
-# Generate migration
-alembic revision --autogenerate -m "Add new feature"
-
-# Apply migrations
-alembic upgrade head
+python scripts/chat_with_marty.py
 ```
 
-### Testing
-
+### Test Suite
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
+# run all tests
 pytest
+
+# specific test files
+pytest tests/test_ai_client.py
+pytest tests/test_chat_endpoint.py
+pytest tests/test_database.py
+
+# with coverage
+pytest --cov=. --cov-report=html
 ```
+
+### Code Quality
+```bash
+# install pre-commit hooks
+pre-commit install
+
+# format code
+ruff format .
+
+# lint code
+ruff check .
+```
+
+### Database Migrations
+```bash
+# generate migration
+alembic revision --autogenerate -m "description"
+
+# apply migrations
+alembic upgrade head
+
+# rollback
+alembic downgrade -1
+```
+
+## Configuration
+
+### Claude AI
+get api key from console.anthropic.com
+add to .env as ANTHROPIC_API_KEY
+
+### Hardcover API
+request access at hardcover.app/api
+add token as HARDCOVER_API_TOKEN=Bearer your_token
+
+### Environment Variables
+- DATABASE_URL: postgresql connection string
+- ANTHROPIC_API_KEY: claude ai api key
+- HARDCOVER_API_TOKEN: book data api token
+- BOOKSHOP_AFFILIATE_ID: optional affiliate links
+- DEBUG: true/false
+- LOG_LEVEL: INFO/DEBUG
+
+## Architecture
+
+### AI Layer
+claude ai handles conversation intelligence and book recommendations
+
+### Database Layer
+postgresql with async sqlalchemy for data persistence
+alembic for schema migrations
+
+### API Layer
+fastapi with async endpoints
+hypercorn asgi server for production deployment
+
+### Personality System
+marty's personality defined in prompts/marty_system_prompt.md
+casual texting style with wizard references
+
+## Database Schema
+
+- customers: phone numbers and basic info
+- conversations: message threads with context
+- messages: individual texts with direction tracking
+- books: catalog from hardcover api
+- inventory: stock levels and availability
+- orders: purchases and fulfillment
+
+## Current Implementation Status
+
+implemented:
+- fastapi application with async support
+- claude ai integration with conversation history
+- database layer with migrations
+- hardcover api integration
+- comprehensive test suite
+- terminal chat interface
+
+in development:
+- sms webhook handler
+- square api for payments
+- redis caching layer
+- rate limiting
+- purchase flow
+- inventory management
 
 ## Troubleshooting
 
-### Common Supabase Issues
+### Database Issues
+```bash
+# test connection
+python database.py
 
-1. **Connection timeout**: Check your internet connection and Supabase project status
-2. **Authentication failed**: Verify your password and project URL
-3. **SSL errors**: Ensure you're using `postgresql+asyncpg://` protocol
+# check environment
+echo $DATABASE_URL
+
+# reset database
+alembic downgrade base
+alembic upgrade head
+```
+
+### Claude AI Issues
+```bash
+# test integration
+python scripts/smoke_test.py
+
+# check api key
+echo $ANTHROPIC_API_KEY
+```
+
+### Test Failures
+```bash
+# verbose output
+pytest -v
+
+# specific test with output
+pytest tests/test_database.py -v -s
+```
 
 ### Debug Mode
-
-Enable debug mode in your `.env`:
-```env
+```bash
+# add to .env
 DEBUG=true
 LOG_LEVEL=DEBUG
 ```
 
-Then check database logs by setting `echo=True` in the database engine configuration.
+## Contributing
+
+1. fork repository
+2. create feature branch
+3. make changes
+4. run tests: pytest
+5. run linting: ruff check .
+6. submit pull request
 
 ## License
 
-MIT License - see LICENSE file for details.
+Copyright (c) 2025 Script Wizards
+All rights reserved.
+
+This source code is proprietary and confidential.
+Unauthorized copying, distribution, or use is strictly prohibited.
+
+---
+
+built by a burnt-out wizard who knows books
