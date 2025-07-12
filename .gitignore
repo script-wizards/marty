@@ -197,6 +197,11 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Redis files
+dump.rdb
+*.rdb
+appendonly.aof
+
 # PyPI configuration file
 .pypirc
 

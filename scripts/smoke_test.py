@@ -95,25 +95,29 @@ class SmokeTestRunner:
     async def test_hardcover_integration(self) -> bool:
         """Test Hardcover API integration."""
         try:
-            from hardcover_client import HardcoverClient
+            from tools.external.hardcover import HardcoverTool
 
-            client = HardcoverClient()
+            tool = HardcoverTool()
 
             # Test authentication
-            user = await client.get_current_user()
-            if not user or not user.get("me"):
+            user_result = await tool.execute(action="get_current_user")
+            if not user_result.success or not user_result.data.get("me"):
                 raise SmokeTestError("Authentication failed")
 
             # Test book search
-            books = await client.search_books("harry potter", limit=2)
-            if not books:
+            books_result = await tool.execute(
+                action="search_books", query="harry potter", limit=2
+            )
+            if not books_result.success or not books_result.data:
                 raise SmokeTestError("Book search returned no results")
 
-            await client.close()
+            await tool.close()
 
-            username = user.get("me", {}).get("username", "Unknown")
+            username = user_result.data.get("me", {}).get("username", "Unknown")
             self._log_test(
-                "Hardcover API", True, f"User: {username}, Found {len(books)} books"
+                "Hardcover API",
+                True,
+                f"User: {username}, Found {len(books_result.data)} books",
             )
             return True
 
