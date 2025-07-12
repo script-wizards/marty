@@ -686,6 +686,7 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "colorama" },
     { name = "httpx" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -720,6 +721,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "colorama", specifier = ">=0.4.6" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pytest", specifier = ">=8.4.1" },

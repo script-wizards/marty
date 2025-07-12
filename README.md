@@ -83,11 +83,18 @@ alembic upgrade head
 # test database connection
 python database.py
 
-# test claude integration
+# comprehensive integration test (⚠️ makes real API calls - costs money)
 python scripts/smoke_test.py
 ```
 
 ### Run Application
+
+Development server with hot reload:
+```bash
+uv run fastapi dev main.py
+```
+
+Production server:
 ```bash
 python main.py
 ```
@@ -127,10 +134,20 @@ response:
 
 ## Development
 
-### Interactive Testing
+### Development Scripts
+
+**Interactive Testing** (internal use only):
 ```bash
 python scripts/chat_with_marty.py
 ```
+Terminal chat interface for testing AI responses without SMS pipeline.
+
+**Integration Testing** (⚠️ costs money):
+```bash
+python scripts/smoke_test.py
+```
+Comprehensive test of all integrations: Claude AI, Hardcover API, and database.
+Makes real API calls - use sparingly.
 
 ### Test Suite
 ```bash
@@ -249,7 +266,7 @@ alembic upgrade head
 
 ### Claude AI Issues
 ```bash
-# test integration
+# test integration (⚠️ costs money)
 python scripts/smoke_test.py
 
 # check api key
@@ -288,7 +305,3 @@ All rights reserved.
 
 This source code is proprietary and confidential.
 Unauthorized copying, distribution, or use is strictly prohibited.
-
----
-
-built by a burnt-out wizard who knows books
