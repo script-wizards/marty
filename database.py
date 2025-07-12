@@ -3,6 +3,7 @@ Database module for Marty SMS Bookstore Chatbot.
 Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 """
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -29,6 +30,9 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 # Database URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # SQLAlchemy setup
 Base = declarative_base()
@@ -86,9 +90,8 @@ class Customer(Base):
     square_customer_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, nullable=True
     )
-    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -179,11 +182,11 @@ class Book(Base):
     isbn: Mapped[str | None] = mapped_column(
         String(20), unique=True, nullable=True, index=True
     )
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    author: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     publication_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -192,7 +195,7 @@ class Book(Base):
     hardcover_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True
     )
-    bookshop_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    bookshop_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Metadata
     genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -341,16 +344,14 @@ class RateLimit(Base):
 # Pydantic Schemas
 class CustomerCreate(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
-    first_name: str | None = Field(None, max_length=100)
-    last_name: str | None = Field(None, max_length=100)
-    email: str | None = Field(None, max_length=255)
+    name: str | None = None
+    email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
 
 
 class CustomerUpdate(BaseModel):
-    first_name: str | None = Field(None, max_length=100)
-    last_name: str | None = Field(None, max_length=100)
-    email: str | None = Field(None, max_length=255)
+    name: str | None = None
+    email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
 
 
@@ -359,8 +360,7 @@ class CustomerResponse(BaseModel):
 
     id: str
     phone: str
-    first_name: str | None = None
-    last_name: str | None = None
+    name: str | None = None
     email: str | None = None
     square_customer_id: str | None = None
     created_at: datetime
@@ -416,28 +416,28 @@ class MessageResponse(BaseModel):
 
 class BookCreate(BaseModel):
     isbn: str | None = Field(None, max_length=20)
-    title: str = Field(..., min_length=1, max_length=500)
-    author: str | None = Field(None, max_length=500)
+    title: str = Field(..., min_length=1)
+    author: str | None = None
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
-    publisher: str | None = Field(None, max_length=200)
+    publisher: str | None = None
     publication_date: datetime | None = None
     hardcover_id: str | None = Field(None, max_length=100)
-    bookshop_url: str | None = Field(None, max_length=500)
+    bookshop_url: str | None = None
     genre: str | None = Field(None, max_length=100)
     format: str | None = Field(None, max_length=50)
     page_count: int | None = Field(None, ge=0)
 
 
 class BookUpdate(BaseModel):
-    title: str | None = Field(None, min_length=1, max_length=500)
-    author: str | None = Field(None, max_length=500)
+    title: str | None = Field(None, min_length=1)
+    author: str | None = None
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
-    publisher: str | None = Field(None, max_length=200)
+    publisher: str | None = None
     publication_date: datetime | None = None
     hardcover_id: str | None = Field(None, max_length=100)
-    bookshop_url: str | None = Field(None, max_length=500)
+    bookshop_url: str | None = None
     genre: str | None = Field(None, max_length=100)
     format: str | None = Field(None, max_length=50)
     page_count: int | None = Field(None, ge=0)
@@ -586,7 +586,7 @@ async def get_customer_by_phone(db: AsyncSession, phone: str) -> Customer | None
         result = await db.execute(select(Customer).where(Customer.phone == phone))
         return result.scalars().first()
     except Exception as e:
-        print(f"Error fetching customer by phone {phone}: {e}")
+        logger.error(f"Error fetching customer by phone {phone}: {e}")
         return None
 
 
@@ -618,7 +618,7 @@ async def get_active_conversation(db: AsyncSession, phone: str) -> Conversation 
         )
         return result.scalars().first()
     except Exception as e:
-        print(f"Error fetching active conversation for phone {phone}: {e}")
+        logger.error(f"Error fetching active conversation for phone {phone}: {e}")
         return None
 
 
@@ -660,7 +660,7 @@ async def get_conversation_messages(
         )
         return list(result.scalars().all())
     except Exception as e:
-        print(f"Error fetching messages for conversation {conversation_id}: {e}")
+        logger.error(f"Error fetching messages for conversation {conversation_id}: {e}")
         return []
 
 
@@ -676,7 +676,7 @@ async def search_books(db: AsyncSession, query: str, limit: int = 10) -> list[Bo
         )
         return list(result.scalars().all())
     except Exception as e:
-        print(f"Error searching books with query '{query}': {e}")
+        logger.error(f"Error searching books with query '{query}': {e}")
         return []
 
 

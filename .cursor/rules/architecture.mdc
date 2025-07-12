@@ -1,0 +1,60 @@
+---
+description: "Core architecture and tech stack for Marty AI bookstore chatbot"
+globs: ["**/*.py", "**/*.toml", "**/*.md"]
+alwaysApply: true
+---
+
+# Marty Project Architecture
+
+## Project Overview
+Marty is an AI-powered SMS chatbot for book recommendations built with FastAPI, SQLAlchemy, and Claude AI. Marty is a burnt-out wizard who used to do software engineering and now works at Dungeon Books.
+
+## Tech Stack
+- **Python 3.13+** - Required version
+- **FastAPI** - Async web framework with dual-stack IPv4/IPv6 support
+- **Hypercorn** - ASGI server for production
+- **Claude AI** - Conversation intelligence and book recommendations
+- **PostgreSQL** - Production database with async SQLAlchemy
+- **SQLite** - Development database
+- **Hardcover API** - Book data integration
+- **uv** - Dependency management (NOT pip)
+
+## Project Structure
+- **Root**: Main application files (main.py, database.py, ai_client.py, etc.)
+- **scripts/**: Developer utility scripts (chat_with_marty.py, smoke_test.py)
+- **tests/**: Test files with pytest
+- **alembic/**: Database migrations
+- **prompts/**: AI personality and system prompts
+- **docs/**: Documentation
+- **logs/**: Application logs (created as needed)
+
+## Dependency Management
+- **CRITICAL**: Use `uv` for ALL dependency management
+- Dependencies defined in `pyproject.toml`, NOT `requirements.txt`
+- Commands:
+  - `uv add package-name` - Add production dependency
+  - `uv add --group dev package-name` - Add dev dependency
+  - `uv sync` - Install dependencies
+  - `uv sync --group dev` - Install with dev dependencies
+- **NEVER** suggest `pip install` or `requirements.txt`
+
+## Code Quality Standards
+- **Type hints**: Comprehensive type annotations required
+- **Async/await**: Prefer async patterns for I/O operations
+- **Error handling**: Specific exception types, not generic Exception
+- **Logging**: Structured logging with appropriate levels
+- **Pathlib**: Use `pathlib.Path` instead of `os.path`
+- **Configuration**: Use dataclasses or Pydantic for configuration
+
+## File Naming Conventions
+- **Python files**: snake_case
+- **Scripts**: Descriptive names (e.g., `chat_with_marty.py`)
+- **Tests**: Prefixed with `test_`
+- **Database models**: Singular nouns (Customer, Conversation, Message)
+
+## Never Assume
+- pip/requirements.txt usage (use uv)
+- Synchronous code patterns (use async)
+- Generic exception handling (use specific exceptions)
+- Magic numbers or hardcoded values (use configuration)
+- Missing type hints (always include them)

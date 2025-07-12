@@ -1,0 +1,240 @@
+---
+description: "Code quality standards, ruff configuration, pre-commit hooks, and formatting rules"
+globs: ["**/*.py", "**/*.toml", "**/.pre-commit-config.yaml", "**/ruff.toml"]
+alwaysApply: true
+---
+
+# Code Quality Rules
+
+## Code Quality Tools
+- **ruff** - Fast Python linter and formatter
+- **pre-commit** - Git hooks for code quality
+- **Type hints** - Comprehensive type annotations
+- **Structured logging** - Proper logging practices
+
+## Ruff Configuration
+```toml
+# pyproject.toml
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
+]
+```
+
+## Running Code Quality Tools
+```bash
+# Format code
+ruff format .
+
+# Lint code
+ruff check .
+
+# Auto-fix issues
+ruff check --fix .
+
+# Install pre-commit hooks
+pre-commit install
+
+# Run pre-commit on all files
+pre-commit run --all-files
+```
+
+## Pre-commit Configuration
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+```
+
+## Development Workflow
+1. **Write code** with proper type hints
+2. **Run ruff format** to format code
+3. **Run ruff check** to catch issues
+4. **Fix any linting errors** before committing
+5. **Commit changes** (pre-commit runs automatically)
+
+## Type Annotations
+```python
+# Required type hints
+def process_message(message: str, phone: str) -> ChatResponse:
+    pass
+
+# Async functions - use modern union syntax (Python 3.10+)
+async def get_customer(phone: str) -> Customer | None:
+    pass
+
+# Class methods
+class ChatHandler:
+    def __init__(self, config: ChatConfig) -> None:
+        pass
+
+    async def handle_message(self, message: str) -> str:
+        pass
+
+# Modern union syntax (preferred)
+def process_data(data: str | int | None) -> dict[str, Any]:
+    pass
+
+# Legacy syntax (avoid)
+# def process_data(data: Optional[Union[str, int]]) -> Dict[str, Any]:
+#     pass
+```
+
+## Import Organization
+```python
+# Standard library imports
+import asyncio
+import logging
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+
+# Third-party imports
+from fastapi import FastAPI
+from sqlalchemy import select
+from pydantic import BaseModel
+
+# Local imports
+from database import AsyncSession
+from ai_client import generate_ai_response
+```
+
+## Error Handling Standards
+```python
+# Specific exception types
+class ChatError(Exception):
+    """Base exception for chat-related errors."""
+    pass
+
+class APIKeyError(ChatError):
+    """Raised when API key is missing or invalid."""
+    pass
+
+# Proper exception handling with chaining
+try:
+    response = await generate_ai_response(...)
+except APIKeyError as e:
+    logger.error(f"API key error: {e}")
+    raise
+except Exception as e:
+    logger.error(f"Unexpected error: {e}")
+    raise ChatError(f"Failed to generate response: {e}") from e
+```
+
+## Logging Standards
+```python
+# Structured logging
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+
+# Usage
+logger.info("Processing chat message", extra={
+    "phone": phone,
+    "message_length": len(message)
+})
+```
+
+## Code Organization
+```python
+# Method decomposition
+class ChatHandler:
+    def _validate_input(self, message: str) -> None:
+        """Validate input message."""
+        pass
+
+    def _update_context(self) -> None:
+        """Update customer context."""
+        pass
+
+    async def _get_ai_response(self, message: str) -> str:
+        """Get AI response with error handling."""
+        pass
+
+    async def handle_message(self, message: str) -> str:
+        """Main handler with composed methods."""
+        self._validate_input(message)
+        self._update_context()
+        return await self._get_ai_response(message)
+```
+
+## Configuration Management
+```python
+# Use dataclasses for configuration
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class ChatConfig:
+    max_history_length: int = 20
+    api_timeout: int = 30
+    debug: bool = False
+
+    @classmethod
+    def from_env(cls) -> 'ChatConfig':
+        """Load configuration from environment variables."""
+        pass
+```
+
+## File Path Usage
+```python
+# Use pathlib instead of os.path
+from pathlib import Path
+
+# Correct
+PROJECT_ROOT = Path(__file__).parent.parent
+log_file = PROJECT_ROOT / 'logs' / 'app.log'
+
+# Incorrect
+import os
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_file = os.path.join(project_root, 'logs', 'app.log')
+```
+
+## Never Allow
+- **pip commands** - Use uv instead
+- **requirements.txt** - Use pyproject.toml
+- **Generic Exception** - Use specific exception types
+- **Missing type hints** - All functions need type annotations
+- **Magic numbers** - Use named constants or configuration
+- **os.path** - Use pathlib.Path
+- **Synchronous I/O** - Use async patterns
+
+## Code Review Checklist
+- [ ] Type hints on all functions
+- [ ] Specific exception types
+- [ ] Async/await for I/O operations
+- [ ] Proper logging with context
+- [ ] Pathlib for file operations
+- [ ] No magic numbers or hardcoded values
+- [ ] Descriptive variable names
+- [ ] Method decomposition for large functions
