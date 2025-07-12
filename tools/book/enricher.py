@@ -12,11 +12,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import database
 from database import (
-    AsyncSessionLocal,
     Book,
     BookCreate,
-    init_database,
 )
 from tools.base import BaseTool, ToolResult
 from tools.external.hardcover import HardcoverAPIError, HardcoverTool
@@ -322,10 +321,10 @@ Guidelines:
     async def _store_book(self, book_data: dict[str, Any]) -> None:
         """Store validated book in database."""
         try:
-            init_database()
-            assert AsyncSessionLocal is not None
+            database.init_database()
+            assert database.AsyncSessionLocal is not None
 
-            async with AsyncSessionLocal() as session:
+            async with database.AsyncSessionLocal() as session:
                 # Check if book already exists
                 from sqlalchemy import select
 

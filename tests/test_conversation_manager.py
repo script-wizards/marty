@@ -131,8 +131,8 @@ class TestConversationManagerTool:
         assert len(deserialized.messages) == len(sample_conversation_context.messages)
 
     @pytest.mark.asyncio
-    @patch("tools.conversation.manager.init_database")
-    @patch("tools.conversation.manager.AsyncSessionLocal")
+    @patch("database.init_database")
+    @patch("database.AsyncSessionLocal")
     async def test_load_conversation_from_database(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):
@@ -181,8 +181,8 @@ class TestConversationManagerTool:
             assert context.messages[0].content == "Hello"
 
     @pytest.mark.asyncio
-    @patch("tools.conversation.manager.init_database")
-    @patch("tools.conversation.manager.AsyncSessionLocal")
+    @patch("database.init_database")
+    @patch("database.AsyncSessionLocal")
     async def test_create_new_conversation(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):

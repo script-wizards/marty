@@ -18,8 +18,8 @@ from typing import Any
 
 import redis.asyncio as redis
 
+import database
 from database import (
-    AsyncSessionLocal,
     ConversationCreate,
     CustomerCreate,
     MessageCreate,
@@ -29,7 +29,6 @@ from database import (
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
-    init_database,
 )
 from tools.base import BaseTool, ToolResult
 
@@ -240,10 +239,10 @@ class ConversationManagerTool(BaseTool):
     @asynccontextmanager
     async def _get_db_session(self):
         """Get a database session as context manager."""
-        init_database()  # Ensure database is initialized
-        assert AsyncSessionLocal is not None, "Database not initialized"
+        database.init_database()  # Ensure database is initialized
+        assert database.AsyncSessionLocal is not None, "Database not initialized"
 
-        async with AsyncSessionLocal() as session:
+        async with database.AsyncSessionLocal() as session:
             try:
                 yield session
             except Exception:
