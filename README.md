@@ -32,9 +32,18 @@ AI-powered SMS chatbot for book recommendations and store management.
    ```
 
 3. **Initialize the database:**
+
+   For development/testing:
    ```bash
    python database.py
    ```
+
+   For production (recommended):
+   ```bash
+   alembic upgrade head
+   ```
+
+   **Note**: Using `python database.py` creates tables directly and bypasses Alembic migrations. For production environments, always use `alembic upgrade head` to ensure migrations are applied consistently.
 
 #### Option B: SQLite (Development)
 
@@ -49,6 +58,8 @@ Run the database test script:
 ```bash
 python database.py
 ```
+
+**Note**: This script tests the connection and creates tables. For production deployments, use `alembic upgrade head` instead.
 
 You should see output like:
 ```

@@ -19,7 +19,6 @@ from database import (
     get_active_conversation,
     get_customer_by_phone,
     get_db,
-    init_database,
     init_db,
 )
 
@@ -104,9 +103,6 @@ class ChatResponse(BaseModel):
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat endpoint for testing conversations."""
-    # Ensure database is initialized
-    init_database()
-
     try:
         # Get or create customer
         customer = await get_customer_by_phone(db, request.phone)
