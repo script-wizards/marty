@@ -44,7 +44,13 @@ An AI-powered SMS/RCS chatbot for book recommendations and purchases, built with
    uv run alembic upgrade head
    ```
 
-6. **Run the development server**
+6. **Install pre-commit hooks**
+
+   ```bash
+   pre-commit install
+   ```
+
+7. **Run the development server**
 
    ```bash
    uv run python main.py

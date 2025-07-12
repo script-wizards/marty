@@ -7,7 +7,7 @@ import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -248,7 +248,7 @@ class Order(Base):
 
     # Relationships
     customer: Mapped["Customer"] = relationship("Customer", back_populates="orders")
-    conversation: Mapped[Optional["Conversation"]] = relationship("Conversation")
+    conversation: Mapped["Conversation | None"] = relationship("Conversation")
     items: Mapped[list["OrderItem"]] = relationship("OrderItem", back_populates="order")
 
 
