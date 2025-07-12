@@ -18,8 +18,8 @@
 - [ ] Get Supabase URL and service key
 - [ ] Create Square developer account
 - [ ] Get Square sandbox credentials
-- [ ] Apply for Hardcover API access
-- [ ] Get Hardcover API key
+- [x] Apply for Hardcover API access
+- [x] Get Hardcover API key
 - [x] Register with Anthropic for Claude API
 - [x] Get Claude API key
 - [x] Schedule meeting with Smobi representative
@@ -28,7 +28,7 @@
 
 ### Configuration
 
-- [ ] Create .env.example file with all required variables
+- [x] Create .env.example file with all required variables
 - [ ] Create local .env file with development credentials
 - [ ] Document all environment variables in README
 
@@ -41,6 +41,10 @@
 - [x] Set up pytest with async support
 - [x] Configure dual stack IPv4/IPv6 networking
 - [x] Set up comprehensive test coverage
+- [x] Add GraphQL dependencies (gql, aiohttp, httpx)
+- [x] Add async SQLite support (aiosqlite)
+- [x] Create API exploration utilities
+- [x] Add comprehensive Hardcover API documentation
 
 ## Step 1: Database Foundation
 
@@ -239,14 +243,14 @@
 
 ### Hardcover Client
 
-- [ ] Create `book_service.py` module with httpx client (async for API calls)
-- [ ] Implement HardcoverClient class
-- [ ] Create Pydantic models for book data and inventory
-- [ ] Add authentication headers
-- [ ] Implement search_books method
-- [ ] Implement get_book_details method
-- [ ] Handle API errors with circuit breaker pattern
-- [ ] Add OpenTelemetry tracing for API calls
+- [x] Create `book_service.py` module with httpx client (async for API calls)
+- [x] Implement HardcoverClient class
+- [x] Create Pydantic models for book data and inventory
+- [x] Add authentication headers
+- [x] Implement search_books method
+- [x] Implement get_book_details method
+- [x] Handle API errors with circuit breaker pattern
+- [x] Add OpenTelemetry tracing for API calls
 
 ### Inventory Management
 
@@ -268,13 +272,13 @@
 
 ### Book Service Testing
 
-- [ ] Create `test_book_service.py` with pytest
-- [ ] Mock Hardcover API with fixtures
-- [ ] Test book search
-- [ ] Test inventory checks
-- [ ] Test Redis cache behavior
-- [ ] Test book mention extraction
-- [ ] Test text matching functionality
+- [x] Create `test_book_service.py` with pytest
+- [x] Mock Hardcover API with fixtures
+- [x] Test book search
+- [x] Test inventory checks
+- [x] Test Redis cache behavior
+- [x] Test book mention extraction
+- [x] Test text matching functionality
 
 ## Step 6: Conversation Manager (Redis + Text Processing)
 

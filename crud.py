@@ -3,35 +3,27 @@ CRUD operations for Marty SMS Bookstore Chatbot.
 Provides async database operations for all models.
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, func, and_, or_
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 
 from database import (
-    Customer,
-    Conversation,
-    Message,
     Book,
-    Inventory,
-    Order,
-    OrderItem,
-    RateLimit,
-    CustomerCreate,
-    CustomerUpdate,
-    CustomerResponse,
-    ConversationCreate,
-    ConversationUpdate,
-    ConversationResponse,
-    MessageCreate,
-    MessageResponse,
     BookCreate,
     BookUpdate,
-    BookResponse,
+    Conversation,
+    ConversationCreate,
+    ConversationUpdate,
+    Customer,
+    CustomerCreate,
+    CustomerUpdate,
+    Inventory,
     InventoryCreate,
-    InventoryUpdate,
-    InventoryResponse,
+    Message,
+    MessageCreate,
+    RateLimit,
 )
 
 
@@ -54,21 +46,21 @@ class CustomerCRUD:
         return db_customer
 
     @staticmethod
-    async def get_by_id(db: AsyncSession, customer_id: str) -> Optional[Customer]:
+    async def get_by_id(db: AsyncSession, customer_id: str) -> Customer | None:
         """Get customer by ID."""
         stmt = select(Customer).where(Customer.id == customer_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_phone(db: AsyncSession, phone: str) -> Optional[Customer]:
+    async def get_by_phone(db: AsyncSession, phone: str) -> Customer | None:
         """Get customer by phone number."""
         stmt = select(Customer).where(Customer.phone == phone)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_square_id(db: AsyncSession, square_id: str) -> Optional[Customer]:
+    async def get_by_square_id(db: AsyncSession, square_id: str) -> Customer | None:
         """Get customer by Square customer ID."""
         stmt = select(Customer).where(Customer.square_customer_id == square_id)
         result = await db.execute(stmt)
@@ -77,7 +69,7 @@ class CustomerCRUD:
     @staticmethod
     async def update(
         db: AsyncSession, customer_id: str, customer_update: CustomerUpdate
-    ) -> Optional[Customer]:
+    ) -> Customer | None:
         """Update customer by ID."""
         stmt = (
             update(Customer)
@@ -88,7 +80,7 @@ class CustomerCRUD:
                     for k, v in customer_update.model_dump().items()
                     if v is not None
                 },
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
             .returning(Customer)
         )
@@ -107,7 +99,7 @@ class CustomerCRUD:
     @staticmethod
     async def list_customers(
         db: AsyncSession, skip: int = 0, limit: int = 100
-    ) -> List[Customer]:
+    ) -> list[Customer]:
         """List customers with pagination."""
         stmt = (
             select(Customer)
@@ -140,9 +132,7 @@ class ConversationCRUD:
         return db_conversation
 
     @staticmethod
-    async def get_by_id(
-        db: AsyncSession, conversation_id: str
-    ) -> Optional[Conversation]:
+    async def get_by_id(db: AsyncSession, conversation_id: str) -> Conversation | None:
         """Get conversation by ID with related messages."""
         stmt = (
             select(Conversation)
@@ -153,9 +143,7 @@ class ConversationCRUD:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_active_by_phone(
-        db: AsyncSession, phone: str
-    ) -> Optional[Conversation]:
+    async def get_active_by_phone(db: AsyncSession, phone: str) -> Conversation | None:
         """Get active conversation by phone number."""
         stmt = (
             select(Conversation)
@@ -169,7 +157,7 @@ class ConversationCRUD:
     @staticmethod
     async def get_recent_messages(
         db: AsyncSession, conversation_id: str, limit: int = 10
-    ) -> List[Message]:
+    ) -> list[Message]:
         """Get recent messages for a conversation."""
         stmt = (
             select(Message)
@@ -183,12 +171,12 @@ class ConversationCRUD:
     @staticmethod
     async def update(
         db: AsyncSession, conversation_id: str, conversation_update: ConversationUpdate
-    ) -> Optional[Conversation]:
+    ) -> Conversation | None:
         """Update conversation by ID."""
         update_data = {
             k: v for k, v in conversation_update.model_dump().items() if v is not None
         }
-        update_data["last_message_at"] = datetime.now(timezone.utc)
+        update_data["last_message_at"] = datetime.now(UTC)
 
         stmt = (
             update(Conversation)
@@ -203,7 +191,7 @@ class ConversationCRUD:
     @staticmethod
     async def add_mentioned_book(
         db: AsyncSession, conversation_id: str, book_id: str
-    ) -> Optional[Conversation]:
+    ) -> Conversation | None:
         """Add a book to mentioned books list."""
         # First get the current conversation
         conversation = await ConversationCRUD.get_by_id(db, conversation_id)
@@ -219,7 +207,7 @@ class ConversationCRUD:
             .where(Conversation.id == conversation_id)
             .values(
                 mentioned_books=mentioned_books,
-                last_message_at=datetime.now(timezone.utc),
+                last_message_at=datetime.now(UTC),
             )
             .returning(Conversation)
         )
@@ -230,12 +218,12 @@ class ConversationCRUD:
     @staticmethod
     async def end_conversation(
         db: AsyncSession, conversation_id: str
-    ) -> Optional[Conversation]:
+    ) -> Conversation | None:
         """End a conversation by setting status to 'ended'."""
         stmt = (
             update(Conversation)
             .where(Conversation.id == conversation_id)
-            .values(status="ended", last_message_at=datetime.now(timezone.utc))
+            .values(status="ended", last_message_at=datetime.now(UTC))
             .returning(Conversation)
         )
         result = await db.execute(stmt)
@@ -264,14 +252,14 @@ class MessageCRUD:
         update_stmt = (
             update(Conversation)
             .where(Conversation.id == message.conversation_id)
-            .values(last_message_at=datetime.now(timezone.utc))
+            .values(last_message_at=datetime.now(UTC))
         )
         await db.execute(update_stmt)
 
         return db_message
 
     @staticmethod
-    async def get_by_id(db: AsyncSession, message_id: str) -> Optional[Message]:
+    async def get_by_id(db: AsyncSession, message_id: str) -> Message | None:
         """Get message by ID."""
         stmt = select(Message).where(Message.id == message_id)
         result = await db.execute(stmt)
@@ -280,7 +268,7 @@ class MessageCRUD:
     @staticmethod
     async def get_by_conversation(
         db: AsyncSession, conversation_id: str, skip: int = 0, limit: int = 50
-    ) -> List[Message]:
+    ) -> list[Message]:
         """Get messages for a conversation."""
         stmt = (
             select(Message)
@@ -295,7 +283,7 @@ class MessageCRUD:
     @staticmethod
     async def update_status(
         db: AsyncSession, message_id: str, status: str
-    ) -> Optional[Message]:
+    ) -> Message | None:
         """Update message status."""
         stmt = (
             update(Message)
@@ -334,7 +322,7 @@ class BookCRUD:
         return db_book
 
     @staticmethod
-    async def get_by_id(db: AsyncSession, book_id: str) -> Optional[Book]:
+    async def get_by_id(db: AsyncSession, book_id: str) -> Book | None:
         """Get book by ID with inventory."""
         stmt = (
             select(Book).where(Book.id == book_id).options(selectinload(Book.inventory))
@@ -343,16 +331,14 @@ class BookCRUD:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_isbn(db: AsyncSession, isbn: str) -> Optional[Book]:
+    async def get_by_isbn(db: AsyncSession, isbn: str) -> Book | None:
         """Get book by ISBN."""
         stmt = select(Book).where(Book.isbn == isbn)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_hardcover_id(
-        db: AsyncSession, hardcover_id: str
-    ) -> Optional[Book]:
+    async def get_by_hardcover_id(db: AsyncSession, hardcover_id: str) -> Book | None:
         """Get book by Hardcover API ID."""
         stmt = select(Book).where(Book.hardcover_id == hardcover_id)
         result = await db.execute(stmt)
@@ -361,7 +347,7 @@ class BookCRUD:
     @staticmethod
     async def search_books(
         db: AsyncSession, query: str, skip: int = 0, limit: int = 20
-    ) -> List[Book]:
+    ) -> list[Book]:
         """Search books by title or author."""
         search_pattern = f"%{query}%"
         stmt = (
@@ -379,14 +365,14 @@ class BookCRUD:
     @staticmethod
     async def update(
         db: AsyncSession, book_id: str, book_update: BookUpdate
-    ) -> Optional[Book]:
+    ) -> Book | None:
         """Update book by ID."""
         stmt = (
             update(Book)
             .where(Book.id == book_id)
             .values(
                 **{k: v for k, v in book_update.model_dump().items() if v is not None},
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
             .returning(Book)
         )
@@ -425,7 +411,7 @@ class InventoryCRUD:
     @staticmethod
     async def get_by_book_and_location(
         db: AsyncSession, book_id: str, location: str
-    ) -> Optional[Inventory]:
+    ) -> Inventory | None:
         """Get inventory for a specific book and location."""
         stmt = select(Inventory).where(
             and_(Inventory.book_id == book_id, Inventory.location == location)
@@ -434,7 +420,7 @@ class InventoryCRUD:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_book(db: AsyncSession, book_id: str) -> List[Inventory]:
+    async def get_by_book(db: AsyncSession, book_id: str) -> list[Inventory]:
         """Get all inventory records for a book."""
         stmt = select(Inventory).where(Inventory.book_id == book_id)
         result = await db.execute(stmt)
@@ -445,10 +431,10 @@ class InventoryCRUD:
         db: AsyncSession,
         inventory_id: str,
         quantity: int,
-        reserved: Optional[int] = None,
-    ) -> Optional[Inventory]:
+        reserved: int | None = None,
+    ) -> Inventory | None:
         """Update inventory quantity."""
-        update_data = {"quantity": quantity, "last_updated": datetime.now(timezone.utc)}
+        update_data = {"quantity": quantity, "last_updated": datetime.now(UTC)}
         if reserved is not None:
             update_data["reserved"] = reserved
 
@@ -471,7 +457,7 @@ class InventoryCRUD:
             and_(
                 Inventory.book_id == book_id,
                 Inventory.location == location,
-                Inventory.available == True,
+                Inventory.available,
                 Inventory.quantity >= (Inventory.reserved + quantity),
             )
         )
@@ -481,7 +467,7 @@ class InventoryCRUD:
     @staticmethod
     async def reserve_inventory(
         db: AsyncSession, book_id: str, location: str, quantity: int
-    ) -> Optional[Inventory]:
+    ) -> Inventory | None:
         """Reserve inventory for an order."""
         inventory = await InventoryCRUD.get_by_book_and_location(db, book_id, location)
         if not inventory or inventory.quantity < (inventory.reserved + quantity):
@@ -492,7 +478,7 @@ class InventoryCRUD:
             .where(Inventory.id == inventory.id)
             .values(
                 reserved=inventory.reserved + quantity,
-                last_updated=datetime.now(timezone.utc),
+                last_updated=datetime.now(UTC),
             )
             .returning(Inventory)
         )
@@ -509,7 +495,7 @@ class RateLimitCRUD:
         db: AsyncSession, identifier: str, limit_type: str, window_minutes: int = 60
     ) -> RateLimit:
         """Create a new rate limit record."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         db_rate_limit = RateLimit(
             identifier=identifier,
             limit_type=limit_type,
@@ -525,9 +511,9 @@ class RateLimitCRUD:
     @staticmethod
     async def get_current_limit(
         db: AsyncSession, identifier: str, limit_type: str
-    ) -> Optional[RateLimit]:
+    ) -> RateLimit | None:
         """Get current rate limit for identifier and type."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = select(RateLimit).where(
             and_(
                 RateLimit.identifier == identifier,
@@ -539,9 +525,7 @@ class RateLimitCRUD:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def increment_count(
-        db: AsyncSession, rate_limit_id: str
-    ) -> Optional[RateLimit]:
+    async def increment_count(db: AsyncSession, rate_limit_id: str) -> RateLimit | None:
         """Increment rate limit count."""
         stmt = (
             update(RateLimit)
@@ -556,7 +540,7 @@ class RateLimitCRUD:
     @staticmethod
     async def cleanup_expired(db: AsyncSession) -> int:
         """Clean up expired rate limit records."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = delete(RateLimit).where(RateLimit.expires_at <= now.replace(tzinfo=None))
         result = await db.execute(stmt)
         await db.commit()
@@ -569,7 +553,7 @@ class RateLimitCRUD:
         limit_type: str,
         max_count: int,
         window_minutes: int = 60,
-    ) -> tuple[bool, Optional[RateLimit]]:
+    ) -> tuple[bool, RateLimit | None]:
         """Check if identifier is within rate limit."""
         # First, clean up expired records
         await RateLimitCRUD.cleanup_expired(db)
