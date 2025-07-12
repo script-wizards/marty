@@ -1,0 +1,25 @@
+---
+description: "Environment-specific rules for Marty project development"
+globs: ["**/.env*", "**/pyproject.toml", "**/uv.lock", "**/*.sh", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Environment Rules
+
+## Python Environment
+- Python 3.13+ required
+- Use `uv` for all dependency management
+- Virtual environment managed by `uv`
+
+## Environment Variables
+- Store sensitive data in `.env` file (never commit)
+- Use `.env.example` as template
+- Required variables:
+  - `ANTHROPIC_API_KEY`: Claude API key
+  - `DATABASE_URL`: Database connection string
+  - `SECRET_KEY`: FastAPI secret key
+
+## Development Setup
+- Run `uv sync --group dev` for development dependencies
+- Use `pre-commit` hooks for code quality
+- Configure IDE to use `.venv/bin/python` interpreter

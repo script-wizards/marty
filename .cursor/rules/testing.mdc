@@ -1,0 +1,180 @@
+---
+description: "Testing patterns, pytest configuration, and test structure for Marty project"
+globs: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py", "**/pytest.ini", "**/*test*.py"]
+alwaysApply: false
+---
+
+# Testing Rules
+
+## Test Framework
+- **pytest** with async support
+- **pytest-asyncio** for async test functions
+- **pytest-cov** for coverage reporting
+- **pytest-dotenv** for environment variable management
+
+## Test Structure
+```
+tests/
+├── test_api_client.py      # AI integration tests
+├── test_chat_endpoint.py   # FastAPI endpoint tests
+├── test_database.py        # Database operation tests
+├── test_hardcover_client.py # Book API tests
+└── conftest.py            # Shared fixtures
+```
+
+## Test Configuration
+```python
+# pytest.ini_options in pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
+```
+
+## Running Tests
+```bash
+# Run all tests
+pytest
+
+# Specific test files
+pytest tests/test_ai_client.py
+pytest tests/test_chat_endpoint.py
+pytest tests/test_database.py
+
+# With coverage
+pytest --cov=. --cov-report=html
+
+# Verbose output
+pytest -v -s
+```
+
+## Async Testing Patterns
+```python
+# Async test function
+@pytest.mark.asyncio
+async def test_ai_response():
+    response = await generate_ai_response(...)
+    assert response is not None
+
+# Async fixtures
+@pytest.fixture
+async def async_session():
+    async with AsyncSession(engine) as session:
+        yield session
+```
+
+## Database Testing
+```python
+# Test database operations
+@pytest.mark.asyncio
+async def test_create_customer():
+    async with AsyncSession(engine) as session:
+        customer = Customer(phone="+1234567890")
+        session.add(customer)
+        await session.commit()
+        assert customer.id is not None
+```
+
+## API Testing
+```python
+# Test FastAPI endpoints
+@pytest.mark.asyncio
+async def test_chat_endpoint():
+    request = ChatRequest(
+        message="test message",
+        phone="+1234567890"
+    )
+    response = await chat_endpoint(request)
+    assert isinstance(response, ChatResponse)
+```
+
+## Mocking External Services
+```python
+# Mock AI responses
+@pytest.fixture
+def mock_ai_response():
+    with patch('ai_client.generate_ai_response') as mock:
+        mock.return_value = "mocked response"
+        yield mock
+
+# Mock Hardcover API
+@pytest.fixture
+def mock_hardcover_api():
+    with patch('hardcover_client.search_books') as mock:
+        mock.return_value = [{"title": "Test Book"}]
+        yield mock
+```
+
+## Test Data Management
+```python
+# Test fixtures
+@pytest.fixture
+def sample_customer():
+    return Customer(
+        phone="+1234567890",
+        name="Test Customer"
+    )
+
+@pytest.fixture
+def sample_conversation():
+    return Conversation(
+        customer_id=UUID("..."),
+        started_at=datetime.now(UTC)
+    )
+```
+
+## Environment Variables
+```python
+# .env.test file for testing
+DATABASE_URL=sqlite+aiosqlite:///:memory:
+ANTHROPIC_API_KEY=test_key
+HARDCOVER_API_TOKEN=test_token
+```
+
+## Test Categories
+- **Unit tests**: Individual functions and methods
+- **Integration tests**: Database interactions
+- **API tests**: FastAPI endpoint testing
+- **E2E tests**: Complete conversation flows
+
+## Coverage Requirements
+- **Minimum coverage**: 80% for production code
+- **Exclude files**: migrations, test files, scripts
+- **Focus areas**: Core business logic, API endpoints, database operations
+
+## Test Best Practices
+- **Async/await**: Use async patterns for I/O operations
+- **Isolated tests**: Each test should be independent
+- **Clear assertions**: Use descriptive assertion messages
+- **Mock external APIs**: Don't rely on external services
+- **Test data cleanup**: Clean up test data after tests
+
+## Debugging Tests
+```bash
+# Run specific test with output
+pytest tests/test_database.py::test_create_customer -v -s
+
+# Debug with pdb
+pytest --pdb tests/test_database.py
+
+# Debug on failure
+pytest --pdb-trace tests/test_database.py
+```
+
+## CI/CD Integration
+```yaml
+# Example GitHub Actions
+- name: Run tests
+  run: |
+    uv sync --group dev
+    pytest --cov=. --cov-report=xml
+```
+
+## Performance Testing
+- **Response time testing**: API endpoint performance
+- **Database query performance**: Monitor slow queries
+- **Memory usage**: Check for memory leaks
+- **Concurrent testing**: Test async operations

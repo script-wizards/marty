@@ -3,6 +3,7 @@ Database module for Marty SMS Bookstore Chatbot.
 Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 """
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -29,6 +30,9 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 # Database URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # SQLAlchemy setup
 Base = declarative_base()
@@ -582,7 +586,7 @@ async def get_customer_by_phone(db: AsyncSession, phone: str) -> Customer | None
         result = await db.execute(select(Customer).where(Customer.phone == phone))
         return result.scalars().first()
     except Exception as e:
-        print(f"Error fetching customer by phone {phone}: {e}")
+        logger.error(f"Error fetching customer by phone {phone}: {e}")
         return None
 
 
@@ -614,7 +618,7 @@ async def get_active_conversation(db: AsyncSession, phone: str) -> Conversation 
         )
         return result.scalars().first()
     except Exception as e:
-        print(f"Error fetching active conversation for phone {phone}: {e}")
+        logger.error(f"Error fetching active conversation for phone {phone}: {e}")
         return None
 
 
@@ -656,7 +660,7 @@ async def get_conversation_messages(
         )
         return list(result.scalars().all())
     except Exception as e:
-        print(f"Error fetching messages for conversation {conversation_id}: {e}")
+        logger.error(f"Error fetching messages for conversation {conversation_id}: {e}")
         return []
 
 
@@ -672,7 +676,7 @@ async def search_books(db: AsyncSession, query: str, limit: int = 10) -> list[Bo
         )
         return list(result.scalars().all())
     except Exception as e:
-        print(f"Error searching books with query '{query}': {e}")
+        logger.error(f"Error searching books with query '{query}': {e}")
         return []
 
 

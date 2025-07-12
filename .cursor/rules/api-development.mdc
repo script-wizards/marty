@@ -1,0 +1,118 @@
+---
+description: "FastAPI development patterns, endpoint structure, and async API design for Marty"
+globs: ["**/main.py", "**/*api*.py", "**/*endpoint*.py", "**/*route*.py", "**/*handler*.py"]
+alwaysApply: false
+---
+
+# API Development Rules
+
+## FastAPI Stack
+- **FastAPI** with async support
+- **Hypercorn** ASGI server with dual-stack IPv4/IPv6 support
+- **Pydantic** for request/response validation
+- **Async patterns** throughout
+
+## Server Configuration
+```bash
+# Development server with hot reload
+uv run fastapi dev main.py
+
+# Production server
+python main.py  # Runs on http://localhost:8000
+```
+
+## API Endpoints
+
+### Health Check
+```python
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "database": "connected"}
+```
+
+### Chat Interface
+```python
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    return ChatResponse(
+        response=str,
+        conversation_id=UUID,
+        customer_id=UUID
+    )
+```
+
+## Request/Response Models
+```python
+class ChatRequest(BaseModel):
+    message: str
+    phone: str
+
+class ChatResponse(BaseModel):
+    response: str
+    conversation_id: UUID
+    customer_id: UUID
+```
+
+## Error Handling
+- **HTTP status codes**: Use appropriate codes (400, 404, 500, etc.)
+- **Structured error responses**: Consistent error format
+- **Async exception handling**: Proper async/await patterns
+- **Logging**: Log errors with context
+
+## Async Patterns
+```python
+# Correct async endpoint
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    async with AsyncSession(engine) as session:
+        # Database operations
+        result = await session.execute(query)
+
+    # AI operations
+    response = await generate_ai_response(...)
+
+    return ChatResponse(...)
+```
+
+## Database Integration
+- **Async sessions**: Use AsyncSession for database operations
+- **Dependency injection**: Use FastAPI dependencies for sessions
+- **Transaction management**: Proper commit/rollback handling
+- **Connection pooling**: Efficient database connections
+
+## Validation
+- **Pydantic models**: Request/response validation
+- **Phone number validation**: Proper format checking
+- **Input sanitization**: Clean user inputs
+- **Type hints**: Comprehensive type annotations
+
+## Production Considerations
+- **Hypercorn server**: Dual-stack IPv4/IPv6 support
+- **Environment variables**: Use for configuration
+- **Logging**: Structured logging with appropriate levels
+- **Health checks**: Database connectivity verification
+
+## Development Workflow
+1. **Define Pydantic models** for request/response
+2. **Create async endpoints** with proper error handling
+3. **Add database operations** with async sessions
+4. **Integrate AI responses** with conversation history
+5. **Test endpoints** with proper validation
+
+## Testing
+- **Unit tests**: Test individual endpoints
+- **Integration tests**: Test database interactions
+- **API testing**: Test request/response cycles
+- **Mock external services**: AI and book APIs
+
+## Security
+- **Input validation**: Sanitize all inputs
+- **Rate limiting**: Implement for production
+- **CORS**: Configure for web clients
+- **Authentication**: Implement when needed
+
+## Performance
+- **Async everywhere**: Use async/await patterns
+- **Database pooling**: Efficient connections
+- **Response caching**: When appropriate
+- **Monitoring**: Track response times and errors

@@ -21,7 +21,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Add the new name column
-    op.add_column("customers", sa.Column("name", sa.String(length=200), nullable=True))
+    op.add_column("customers", sa.Column("name", sa.Text(), nullable=True))
 
     # Migrate existing data: combine first_name and last_name into name
     connection = op.get_bind()

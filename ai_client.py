@@ -10,17 +10,15 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 
-# Initialize the Claude client (with safety check)
+# Initialize the Claude client
 def get_claude_client() -> AsyncAnthropic:
     """Get or create Claude client."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY environment variable is required")
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
     return AsyncAnthropic(api_key=api_key)
 
 
 # Create client instance
-client = get_claude_client() if os.getenv("ANTHROPIC_API_KEY") else None
+client = get_claude_client()
 
 
 class ConversationMessage(BaseModel):
@@ -102,11 +100,6 @@ async def generate_ai_response(
                 system_prompt += f"\n\nCurrent Time & Date:\n{' | '.join(time_context)}"
 
         # Generate response with Claude
-        if client is None:
-            raise ValueError(
-                "Claude client not initialized - missing ANTHROPIC_API_KEY"
-            )
-
         response = await client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=500,

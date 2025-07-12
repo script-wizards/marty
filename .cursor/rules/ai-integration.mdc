@@ -1,0 +1,91 @@
+---
+description: "Claude AI integration patterns, conversation handling, and personality system for Marty"
+globs: ["**/ai_client.py", "**/prompts/**", "**/chat_with_marty.py", "**/*ai*.py", "**/*claude*.py"]
+alwaysApply: false
+---
+
+# AI Integration Rules
+
+## Claude AI Integration
+- **Anthropic Claude** for conversation intelligence
+- **API Key**: Store in `ANTHROPIC_API_KEY` environment variable
+- **Async patterns** for all AI calls
+- **Conversation history** management with configurable limits
+
+## Personality System
+- **Marty's Character**: Burnt-out wizard, former software engineer, works at Dungeon Books
+- **Communication Style**: Casual texting, genuinely magical but casual about it
+- **System Prompt**: Defined in `prompts/marty_system_prompt.md`
+- **Personality Consistency**: Maintain wizard references and casual tone
+
+## Conversation Patterns
+```python
+# Conversation structure
+ConversationMessage(
+    role="user" | "assistant",
+    content=str,
+    timestamp=datetime
+)
+
+# Response generation
+response = await generate_ai_response(
+    user_message=str,
+    conversation_history=List[ConversationMessage],
+    customer_context=Dict[str, Any]
+)
+```
+
+## Customer Context
+Include in all AI calls:
+- **name**: Customer name or "Terminal User" for testing
+- **phone**: Customer phone number
+- **customer_id**: Unique identifier
+- **current_time**: ISO timestamp
+- **current_date**: YYYY-MM-DD format
+- **current_day**: Day of week
+
+## Message History Management
+- **Configurable limits**: Default 20 messages, adjustable
+- **Automatic truncation**: Keep recent messages when limit exceeded
+- **Context preservation**: Maintain conversation flow
+- **Timestamp tracking**: All messages include UTC timestamps
+
+## Error Handling
+- **Specific exceptions**: `ChatError`, `APIKeyError` for different failure modes
+- **Graceful degradation**: Continue conversation on recoverable errors
+- **Logging**: Detailed error logging for debugging
+- **Retry logic**: Implement for transient API failures
+
+## Testing Patterns
+- **Interactive testing**: `python scripts/chat_with_marty.py`
+- **Smoke testing**: `python scripts/smoke_test.py`
+- **API key validation**: Check environment before AI calls
+- **Mock responses**: Use for unit testing
+
+## Development Scripts
+- **chat_with_marty.py**: Terminal interface for testing (dev dependency only)
+- **Internal testing only**: Not for production use
+- **Colorized output**: Using colorama (dev dependency)
+- **Command system**: quit, clear, context, help commands
+
+## Integration Points
+- **Hardcover API**: Book data enrichment
+- **Database**: Conversation persistence
+- **SMS webhooks**: Production message handling
+- **FastAPI endpoints**: Web API integration
+
+## Configuration
+```python
+# Required environment variables
+ANTHROPIC_API_KEY=your_claude_api_key_here
+
+# Optional configuration
+MAX_CONVERSATION_HISTORY=20
+AI_TIMEOUT_SECONDS=30
+```
+
+## Troubleshooting
+- **API key issues**: Check `ANTHROPIC_API_KEY` environment variable
+- **Rate limiting**: Implement exponential backoff
+- **Context too long**: Truncate conversation history
+- **Response quality**: Review system prompt and customer context

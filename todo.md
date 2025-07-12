@@ -633,6 +633,10 @@
 - [ ] Improve book matching
 - [ ] Enhance error messages
 
+### Code Quality Improvements
+
+- [ ] Extract hard-coded conversation history limit=10 in main.py to named constant or configuration value
+
 ### Future Features
 
 - [ ] Ingram API integration
