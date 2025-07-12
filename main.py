@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_client import ConversationMessage, generate_ai_response
 from database import (
     ConversationCreate,
     CustomerCreate,
@@ -17,6 +18,7 @@ from database import (
     create_conversation,
     create_customer,
     get_active_conversation,
+    get_conversation_messages,
     get_customer_by_phone,
     get_db,
     init_db,
@@ -88,7 +90,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         ) from e
 
 
-# Chat endpoint for testing
+# Chat endpoint with Claude integration
 class ChatRequest(BaseModel):
     message: str
     phone: str
@@ -102,7 +104,7 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
-    """Chat endpoint for testing conversations."""
+    """Chat endpoint with Claude AI integration."""
     try:
         # Get or create customer
         customer = await get_customer_by_phone(db, request.phone)
@@ -132,8 +134,30 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         )
         await add_message(db, incoming_message)
 
-        # For now, just echo the message (we'll add AI later)
-        response_text = f"Echo: {request.message}"
+        # Get conversation history for context (simple approach using get_conversation_messages)
+        messages = await get_conversation_messages(db, conversation.id, limit=10)
+        conversation_history = [
+            ConversationMessage(
+                role="user" if msg.direction == "inbound" else "assistant",
+                content=msg.content,
+                timestamp=msg.timestamp,
+            )
+            for msg in reversed(messages)  # Reverse to get chronological order
+        ]
+
+        # Generate AI response using Claude
+        response_text = await generate_ai_response(
+            user_message=request.message,
+            conversation_history=conversation_history[
+                :-1
+            ],  # Exclude the message we just added
+            customer_context={
+                "customer_id": customer.id,
+                "phone": customer.phone,
+                "first_name": customer.first_name,
+                "last_name": customer.last_name,
+            },
+        )
 
         # Add outgoing message
         outgoing_message = MessageCreate(
