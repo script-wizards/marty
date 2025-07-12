@@ -1,239 +1,176 @@
-# Marty - Dungeon Books RCS Wizard
+# Marty - SMS Bookstore Chatbot 🤖📚
 
-An AI-powered SMS/RCS chatbot for book recommendations and purchases, built with FastAPI and SQLAlchemy.
+AI-powered SMS chatbot for book recommendations and store management.
 
-## 🚀 Quick Start
+## Features
 
-### Prerequisites
+- 📱 SMS-based book recommendations
+- 📖 Integration with Hardcover API for book data
+- 🛒 Order management and inventory tracking
+- 💬 Conversation history and context
+- 🔍 Smart book search and recommendations
 
-- **Python 3.13+** (required)
-- **uv** package manager
+## Quick Start
 
-### Development Environment Setup
+### 1. Database Setup
 
-1. **Clone the repository**
+#### Option A: Supabase (Recommended for Production)
 
-   ```bash
-   git clone <your-repo-url>
-   cd marty
-   ```
+1. **Create a Supabase project:**
+   - Go to [supabase.com](https://supabase.com)
+   - Create a new project
+   - Note your project URL and password
 
-2. **Install uv (if not already installed)**
-
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-3. **Create virtual environment and install dependencies**
-
-   ```bash
-   uv venv
-   uv sync --dev
-   ```
-
-4. **Set up environment variables**
-
+2. **Configure environment variables:**
    ```bash
    cp .env.example .env
-   # Edit .env with your actual values
    ```
 
-5. **Initialize the database**
+   Edit `.env` and set:
+   ```
+   DATABASE_URL=postgresql+asyncpg://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+   ```
 
+3. **Initialize the database:**
    ```bash
-   uv run alembic upgrade head
+   python database.py
    ```
 
-6. **Install pre-commit hooks**
+#### Option B: SQLite (Development)
 
-   ```bash
-   pre-commit install
-   ```
-
-7. **Run the development server**
-
-   ```bash
-   uv run python main.py
-   ```
-
-The API will be available at `http://localhost:8000`
-
-## 🛠️ Development
-
-### Project Structure
-
-```text
-marty/
-├── alembic/              # Database migrations
-├── docs/                 # Documentation
-├── scripts/              # Utility scripts
-├── tests/                # Test suite
-├── config.py            # Configuration management
-├── crud.py              # Database operations
-├── database.py          # Database models and setup
-├── hardcover_client.py  # Hardcover API integration
-├── main.py              # FastAPI application
-└── pyproject.toml       # Project configuration
-```
-
-### Key Dependencies
-
-- **FastAPI** - Web framework
-- **SQLAlchemy** - ORM with async support
-- **Alembic** - Database migrations
-- **aiosqlite** - Async SQLite driver
-- **Pydantic** - Data validation
-- **Hypercorn** - ASGI server
-
-### Development Commands
-
+For local development, you can use SQLite:
 ```bash
-# Run the application
-uv run python main.py
-
-# Run tests
-uv run pytest
-
-# Run tests with coverage
-uv run pytest --cov
-
-# Run linting and formatting
-uv run ruff check .
-uv run ruff format .
-
-# Run all pre-commit hooks
-uv run pre-commit run --all-files
-
-# Database migrations
-uv run alembic revision --autogenerate -m "description"
-uv run alembic upgrade head
-
-# Health check
-curl http://localhost:8000/health
-```
-
-### Code Quality
-
-This project uses:
-
-- **Ruff** for linting and formatting
-- **Pre-commit hooks** for automated code quality checks
-- **Pytest** for testing with async support
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# Database
 DATABASE_URL=sqlite+aiosqlite:///./marty.db
+```
 
+### 2. Test Database Connection
+
+Run the database test script:
+```bash
+python database.py
+```
+
+You should see output like:
+```
+🔍 Testing Marty Database Connection...
+📋 Database URL: postgresql+asyncpg://postgres:***@db.your-project.supabase.co:5432/postgres
+🏗️  Supabase Project: your-project-ref
+✅ Database connection successful. Server time: 2024-01-01 12:00:00
+🚀 Initializing database tables...
+✅ Database tables created successfully
+✅ Database setup complete!
+```
+
+### 3. Configure External Services
+
+Edit your `.env` file with:
+
+```env
 # Hardcover API (for book data)
-HARDCOVER_API_TOKEN=your_token_here
-HARDCOVER_API_URL=https://api.hardcover.app/v1/graphql
-HARDCOVER_TOKEN_EXPIRY=2026-07-11T15:42:27
+HARDCOVER_API_TOKEN=Bearer your_token_here
 
-# Sinch SMS (for sending messages)
+# Sinch SMS (for messaging)
 SINCH_SERVICE_PLAN_ID=your_service_plan_id
 SINCH_API_TOKEN=your_api_token
-SINCH_API_URL=https://us.sms.api.sinch.com
 
-# Optional integrations
-BOOKSTORE_API_URL=your_bookstore_api_url
-BOOKSTORE_API_KEY=your_bookstore_api_key
+# Optional: Bookshop affiliate
 BOOKSHOP_AFFILIATE_ID=your_affiliate_id
 ```
 
-## 🧪 Testing
-
-### Running Tests
+### 4. Run the Application
 
 ```bash
-# Run all tests
-uv run pytest
-
-# Run specific test file
-uv run pytest tests/test_database.py
-
-# Run with verbose output
-uv run pytest -v
-
-# Run with coverage
-uv run pytest --cov=. --cov-report=html
+python main.py
 ```
 
-### Test Structure
+## Database Schema
 
-- `tests/test_database.py` - Database operations
-- `tests/test_hardcover.py` - Hardcover API integration
-- `tests/test_health.py` - Health check endpoint
+The application uses the following main tables:
 
-## 📊 API Endpoints
+- **customers** - Customer information and phone numbers
+- **conversations** - SMS conversation threads
+- **messages** - Individual SMS messages
+- **books** - Book catalog with metadata
+- **inventory** - Stock levels and availability
+- **orders** - Purchase orders and fulfillment
+- **order_items** - Individual items in orders
 
-### Health Check
+## Supabase Configuration
+
+### Connection Pooling
+
+The application is configured with optimal connection pooling for Supabase:
+
+- **Pool size**: 20 connections
+- **Pool recycle**: 5 minutes
+- **Pre-ping**: Enabled for connection health checks
+- **JIT disabled**: For better connection stability
+
+### Performance Optimizations
+
+- Async PostgreSQL driver (`asyncpg`)
+- Proper indexing on frequently queried columns
+- Connection pooling with health checks
+- Automatic rollback on errors
+
+### Monitoring
+
+Use the built-in database utilities:
+
+```python
+from database import test_db_connection, is_supabase_url, get_supabase_project_ref
+
+# Test connection
+await test_db_connection()
+
+# Check if using Supabase
+if is_supabase_url(DATABASE_URL):
+    project_ref = get_supabase_project_ref(DATABASE_URL)
+    print(f"Supabase project: {project_ref}")
+```
+
+## Development
+
+### Database Migrations
+
+The application uses Alembic for database migrations:
 
 ```bash
-GET /health
+# Generate migration
+alembic revision --autogenerate -m "Add new feature"
+
+# Apply migrations
+alembic upgrade head
 ```
 
-Returns application status and database connectivity.
-
-## 🔧 Configuration
-
-The application uses a centralized configuration system in `config.py`:
-
-- Environment-based configuration
-- Hardcover API token validation
-- Database URL management
-- Service integration settings
-
-## 🚀 Deployment
-
-### Production Setup
-
-1. Set production environment variables
-2. Use PostgreSQL instead of SQLite for production
-3. Configure proper logging
-4. Set up monitoring and health checks
-
-### Docker (Future)
-
-Docker support will be added for containerized deployment.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and pre-commit hooks
-5. Submit a pull request
-
-### Development Workflow
+### Testing
 
 ```bash
-# Create feature branch
-git checkout -b feature/your-feature-name
+# Install dev dependencies
+pip install -e ".[dev]"
 
-# Make changes and commit
-git add .
-git commit -m "Add your feature"
-
-# Push and create PR
-git push origin feature/your-feature-name
+# Run tests
+pytest
 ```
 
-## 📝 License
+## Troubleshooting
 
-Copyright (c) 2025 Dungeon Books
-All rights reserved.
+### Common Supabase Issues
 
-This source code is proprietary and confidential.
-Unauthorized copying, distribution, or use is strictly prohibited.
+1. **Connection timeout**: Check your internet connection and Supabase project status
+2. **Authentication failed**: Verify your password and project URL
+3. **SSL errors**: Ensure you're using `postgresql+asyncpg://` protocol
 
-## 🆘 Support
+### Debug Mode
 
-For issues and questions:
+Enable debug mode in your `.env`:
+```env
+DEBUG=true
+LOG_LEVEL=DEBUG
+```
 
-- Check the documentation in `docs/`
-- Review existing issues
-- Create a new issue with detailed information
+Then check database logs by setting `echo=True` in the database engine configuration.
+
+## License
+
+MIT License - see LICENSE file for details.
