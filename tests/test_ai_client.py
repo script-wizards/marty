@@ -28,7 +28,7 @@ class TestSystemPromptLoading:
         assert len(prompt) > 1000  # Should be substantial
         assert "Martinus Trismegistus" in prompt
         assert "Never invent books" in prompt  # Safety feature
-        assert "Error Handling" in prompt  # Operational details
+        assert "Text Formatting Rules" in prompt  # Operational details
 
     def test_load_system_prompt_custom_file(self):
         """Test loading system prompt from custom file."""
