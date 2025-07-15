@@ -161,6 +161,7 @@ class TestCustomerCRUD:
         self, db_session: AsyncSession, sample_customer: Customer
     ):
         """Test retrieving customer by Square ID."""
+        assert sample_customer.square_customer_id is not None
         customer = await CustomerCRUD.get_by_square_id(
             db_session, sample_customer.square_customer_id
         )
@@ -203,9 +204,7 @@ class TestCustomerCRUD:
         """Test listing customers with pagination."""
         # Create multiple customers
         for i in range(5):
-            customer_data = CustomerCreate(
-                phone=f"+123456789{i}", first_name=f"User{i}", last_name="Test"
-            )
+            customer_data = CustomerCreate(phone=f"+123456789{i}", name=f"User{i} Test")
             await CustomerCRUD.create(db_session, customer_data)
 
         # Test pagination
@@ -380,6 +379,7 @@ class TestBookCRUD:
     @pytest.mark.asyncio
     async def test_get_book_by_isbn(self, db_session: AsyncSession, sample_book: Book):
         """Test retrieving book by ISBN."""
+        assert sample_book.isbn is not None
         book = await BookCRUD.get_by_isbn(db_session, sample_book.isbn)
 
         assert book is not None
@@ -597,9 +597,7 @@ class TestDatabaseIntegration:
     async def test_customer_conversation_relationship(self, db_session: AsyncSession):
         """Test customer-conversation relationship."""
         # Create customer
-        customer_data = CustomerCreate(
-            phone="+1234567890", first_name="Test", last_name="User"
-        )
+        customer_data = CustomerCreate(phone="+1234567890", name="Test User")
         customer = await CustomerCRUD.create(db_session, customer_data)
 
         # Create conversation
@@ -677,7 +675,7 @@ class TestDatabaseIntegration:
         assert book is None
 
         # Test updating non-existent customer
-        update_data = CustomerUpdate(first_name="Updated")
+        update_data = CustomerUpdate(name="Updated")
         updated_customer = await CustomerCRUD.update(
             db_session, "non-existent-id", update_data
         )

@@ -349,6 +349,9 @@ class TestChatIntegrationScenarios:
         with patch(
             "ai_client.client.messages.create", new_callable=AsyncMock
         ) as mock_create:
+            customer_id: str | None = None
+            conversation_id: str | None = None
+
             for i, (user_msg, ai_resp) in enumerate(
                 zip(user_messages, ai_responses, strict=True)
             ):
