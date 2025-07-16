@@ -113,7 +113,7 @@ test-infra-down:
 
 # Run all tests with test infra
 test-all: test-infra-up
-    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5433/marty_test TEST_REDIS_URL=redis://localhost:6380 pytest
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 pytest
     just test-infra-down
 
 # Complete project setup
@@ -196,7 +196,7 @@ ci-full:
 
 # Run only integration tests (requires test infra)
 test-integration: test-infra-up
-    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5433/marty_test TEST_REDIS_URL=redis://localhost:6380 pytest -m integration
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 pytest -m integration
     just test-infra-down
 
 # Watch for changes and restart development server

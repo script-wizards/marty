@@ -62,7 +62,7 @@ class TestConversationMessageValidation:
     """Test conversation message validation and processing."""
 
     def test_conversation_message_creation(self):
-        """Test creation of ConversationMessage objects."""
+        """Test creating a ConversationMessage."""
         from datetime import datetime
 
         message = ConversationMessage(
