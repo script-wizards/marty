@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import database
-from database import (
+import src.database as database
+from src.database import (
     Book,
     BookCreate,
 )
-from tools.base import BaseTool, ToolResult
-from tools.external.hardcover import HardcoverAPIError, HardcoverTool
+from src.tools.base import BaseTool, ToolResult
+from src.tools.external.hardcover import HardcoverAPIError, HardcoverTool
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ class BookEnricherTool(BaseTool):
 
         # Use AI for natural language book extraction
         try:
-            from ai_client import generate_ai_response
+            from src.ai_client import generate_ai_response
 
             prompt = f"""Extract book titles and authors from this AI response about books.
 Return ONLY a JSON array of objects with this structure:
@@ -322,7 +322,9 @@ Guidelines:
         """Store validated book in database."""
         try:
             database.init_database()
-            assert database.AsyncSessionLocal is not None
+            if database.AsyncSessionLocal is None:
+                self.logger.error("Database not initialized: AsyncSessionLocal is None")
+                raise RuntimeError("Database not initialized")
 
             async with database.AsyncSessionLocal() as session:
                 # Check if book already exists

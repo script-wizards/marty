@@ -15,8 +15,8 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
 
-from config import config
-from tools.base import BaseTool, ToolResult
+from src.config import config
+from src.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 

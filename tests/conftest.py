@@ -53,7 +53,7 @@ def mock_claude_api():
     default_response.content = [MagicMock(text="hey! what can I help you with?")]
 
     # Mock the client instance directly (not the class)
-    with patch("ai_client.client") as mock_client:
+    with patch("src.ai_client.client") as mock_client:
         mock_client.messages.create = AsyncMock(return_value=default_response)
 
         # Reset the mock between tests

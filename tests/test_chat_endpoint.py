@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from database import Base, get_db
-from main import app
+from src.database import Base, get_db
+from src.main import app
 
 # Test database configuration
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -236,7 +236,7 @@ class TestChatEndpoint:
     def test_chat_endpoint_database_error_handling(self):
         """Test chat endpoint error handling for database errors."""
         with patch(
-            "main.get_customer_by_phone", side_effect=Exception("Database Error")
+            "src.main.get_customer_by_phone", side_effect=Exception("Database Error")
         ):
             response = client.post(
                 "/chat", json={"message": "Hello", "phone": "+1555777888"}

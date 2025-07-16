@@ -12,8 +12,8 @@ import asyncio
 import logging
 from typing import Any
 
-from ai_client import ConversationMessage, generate_ai_response
-from tools import tool_registry
+from src.ai_client import ConversationMessage, generate_ai_response
+from src.tools import tool_registry
 
 logger = logging.getLogger(__name__)
 

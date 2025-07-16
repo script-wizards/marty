@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-from tools.external.hardcover import HardcoverTool
+from src.tools.external.hardcover import HardcoverTool
 
 # Mock responses matching actual API structure
 MOCK_USER_RESPONSE = {
@@ -95,10 +95,10 @@ MOCK_TRENDING_RESPONSE = {"books_trending": {"error": None, "ids": [123, 456, 78
 async def hardcover_tool():
     """Create a HardcoverTool instance for testing with minimal delays."""
     with patch(
-        "tools.external.hardcover.config.HARDCOVER_API_TOKEN", "Bearer test_token"
+        "src.tools.external.hardcover.config.HARDCOVER_API_TOKEN", "Bearer test_token"
     ):
         with patch(
-            "tools.external.hardcover.config.get_hardcover_headers"
+            "src.tools.external.hardcover.config.get_hardcover_headers"
         ) as mock_headers:
             mock_headers.return_value = {
                 "Authorization": "Bearer test_token",
@@ -122,7 +122,7 @@ async def mock_gql_session():
     mock_client.__aenter__ = AsyncMock(return_value=mock_session)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("tools.external.hardcover.Client") as mock_client_class:
+    with patch("src.tools.external.hardcover.Client") as mock_client_class:
         mock_client_class.return_value = mock_client
         yield mock_session
 
@@ -339,8 +339,8 @@ class TestHardcoverToolBasics:
     @pytest.mark.asyncio
     async def test_missing_token_error(self):
         """Test error when API token is missing."""
-        with patch("tools.external.hardcover.config.HARDCOVER_API_TOKEN", None):
-            from tools.external.hardcover import HardcoverAuthError
+        with patch("src.tools.external.hardcover.config.HARDCOVER_API_TOKEN", None):
+            from src.tools.external.hardcover import HardcoverAuthError
 
             with pytest.raises(
                 HardcoverAuthError, match="Hardcover API token not configured"

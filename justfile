@@ -1,5 +1,8 @@
 # Marty - AI Bookstore Chatbot Justfile
 # Just is a command runner: https://github.com/casey/just
+#
+# To enable parallel CI steps, install GNU parallel:
+#   sudo apt-get update && sudo apt-get install -y parallel
 
 # Show available commands
 default:
@@ -23,11 +26,11 @@ add-dev package:
 
 # Start development server with hot reload
 dev:
-    uv run fastapi dev main.py
+    uv run fastapi dev src/main.py
 
 # Start production server
 run:
-    python main.py
+    python src/main.py
 
 # Run all tests
 test:
@@ -47,19 +50,23 @@ test-cov:
 
 # Format code with ruff
 format:
-    ruff format .
+    ruff format src scripts tests
 
 # Lint code with ruff
 lint:
-    ruff check .
+    ruff check src scripts tests
 
 # Auto-fix linting issues
 lint-fix:
-    ruff check --fix .
+    ruff check --fix src scripts tests
+
+# Bandit security scan
+bandit:
+    bandit -r src
 
 # Type check with ty
 check:
-    uv run ty check .
+    uv run ty check src
 
 # Run format and lint checks
 check-all:
@@ -86,15 +93,15 @@ db-revision message:
 
 # Start interactive chat with Marty (internal testing)
 chat:
-    python scripts/chat.py
+    python src/scripts/chat.py
 
 # Run comprehensive integration test (costs money)
 smoke-test:
-    python scripts/smoke_test.py
+    python src/scripts/smoke_test.py
 
 # Test database connection
 test-db:
-    python database.py
+    python src/database.py
 
 # Start test infrastructure (PostgreSQL + Redis for testing)
 test-infra-up:
@@ -179,14 +186,12 @@ help:
 
 # Run lint, type check, and unit tests (fast, no infra)
 ci:
-    just lint
-    just check
+    parallel --jobs $(nproc) ::: "just lint" "just check" "just bandit"
     pytest -m "not integration"
 
 # Run lint, type check, and all tests (with infra)
 ci-full:
-    just lint
-    just check
+    parallel --jobs $(nproc) ::: "just lint" "just check" "just bandit"
     just test-all
 
 # Run only integration tests (requires test infra)

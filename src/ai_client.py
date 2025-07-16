@@ -29,7 +29,7 @@ class ConversationMessage(BaseModel):
     timestamp: datetime
 
 
-def load_system_prompt(prompt_file: str = "prompts/marty_system_prompt.md") -> str:
+def load_system_prompt(prompt_file: str = "../prompts/marty_system_prompt.md") -> str:
     """Load the system prompt from a file."""
     try:
         prompt_path = Path(__file__).parent / prompt_file

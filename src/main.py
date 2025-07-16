@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_client import ConversationMessage, generate_ai_response
-from database import (
+from src.ai_client import ConversationMessage, generate_ai_response
+from src.database import (
     ConversationCreate,
     CustomerCreate,
     MessageCreate,

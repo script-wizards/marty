@@ -46,6 +46,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # install just command runner
 curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/bin
 
+# install GNU parallel (required for CI and fast local checks)
+# Debian/Ubuntu:
+sudo apt-get update && sudo apt-get install -y parallel
+# macOS (with Homebrew):
+brew install parallel
+
 # clone repository
 git clone <repository-url>
 cd marty
@@ -248,6 +254,11 @@ just ci-full
 just watch
 ```
 
+**Parallelized Checks:**
+- Lint, type check, and security scan (Bandit) are run in parallel for faster feedback using GNU parallel.
+- GNU parallel is required for CI and pre-commit hooks. On Linux, it is auto-installed by pre-commit/CI. On macOS, install it manually with `brew install parallel`.
+- If you see errors like `parallel: command not found`, install GNU parallel as above.
+
 **Test Infrastructure**:
 - Docker Compose setup for isolated testing
 - PostgreSQL and Redis containers for integration tests
@@ -338,6 +349,11 @@ MARTY_ENABLE_REAL_API_TESTS=1 just smoke-test
 # check api key
 echo $ANTHROPIC_API_KEY
 ```
+
+### GNU parallel Not Found
+If you see errors about `parallel: command not found` during CI or local runs, install GNU parallel:
+- **Debian/Ubuntu:** `sudo apt-get update && sudo apt-get install -y parallel`
+- **macOS (Homebrew):** `brew install parallel`
 
 ### Test Failures
 ```bash

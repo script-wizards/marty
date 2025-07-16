@@ -18,8 +18,8 @@ from typing import Any
 
 import redis.asyncio as redis
 
-import database
-from database import (
+import src.database as database
+from src.database import (
     ConversationCreate,
     CustomerCreate,
     MessageCreate,
@@ -30,7 +30,7 @@ from database import (
     get_conversation_messages,
     get_customer_by_phone,
 )
-from tools.base import BaseTool, ToolResult
+from src.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +240,9 @@ class ConversationManagerTool(BaseTool):
     async def _get_db_session(self):
         """Get a database session as context manager."""
         database.init_database()  # Ensure database is initialized
-        assert database.AsyncSessionLocal is not None, "Database not initialized"
+        if database.AsyncSessionLocal is None:
+            self.logger.error("Database not initialized: AsyncSessionLocal is None")
+            raise RuntimeError("Database not initialized")
 
         async with database.AsyncSessionLocal() as session:
             try:

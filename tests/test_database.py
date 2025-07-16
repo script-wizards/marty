@@ -11,7 +11,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from crud import (
+from src.crud import (
     BookCRUD,
     ConversationCRUD,
     CustomerCRUD,
@@ -19,7 +19,7 @@ from crud import (
     MessageCRUD,
     RateLimitCRUD,
 )
-from database import (
+from src.database import (
     Base,
     Book,
     BookCreate,

@@ -9,7 +9,7 @@ from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from database import (
+from src.database import (
     Book,
     BookCreate,
     BookUpdate,

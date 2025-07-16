@@ -145,7 +145,7 @@ class MartyChat:
         self, role: str, content: str, timestamp: datetime | None = None
     ) -> None:
         """Add a message to conversation history."""
-        from ai_client import ConversationMessage
+        from src.ai_client import ConversationMessage
 
         if timestamp is None:
             timestamp = datetime.now(UTC)
@@ -199,7 +199,7 @@ class MartyChat:
 
     async def _get_initial_response(self) -> str:
         """Get Marty's initial greeting."""
-        from ai_client import generate_ai_response
+        from src.ai_client import generate_ai_response
 
         try:
             response = await generate_ai_response(
@@ -214,7 +214,7 @@ class MartyChat:
 
     async def _get_ai_response(self, user_input: str) -> str:
         """Get AI response for user input."""
-        from ai_client import generate_ai_response
+        from src.ai_client import generate_ai_response
 
         try:
             response = await generate_ai_response(

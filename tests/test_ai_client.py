@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai_client import (
+from src.ai_client import (
     MARTY_SYSTEM_PROMPT,
     ConversationMessage,
     generate_ai_response,
@@ -34,18 +34,18 @@ class TestSystemPromptLoading:
         """Test loading system prompt from custom file."""
         # Create a temporary test prompt file
         test_prompt = "Test prompt content"
-        test_file = Path("test_prompt.txt")
+        test_file = Path(__file__).parent / "test_prompt.txt"
         test_file.write_text(test_prompt)
 
         try:
-            prompt = load_system_prompt("test_prompt.txt")
+            prompt = load_system_prompt(str(test_file))
             assert prompt == test_prompt
         finally:
             test_file.unlink()  # Clean up
 
     def test_load_system_prompt_file_not_found(self):
         """Test fallback when prompt file doesn't exist."""
-        with patch("ai_client.logger.warning") as mock_warning:
+        with patch("src.ai_client.logger.warning") as mock_warning:
             prompt = load_system_prompt("nonexistent_file.txt")
 
             assert isinstance(prompt, str)
@@ -295,7 +295,7 @@ class TestGenerateAIResponse:
         # Make the mock raise an exception
         mock_claude_api.messages.create.side_effect = Exception("API Error")
 
-        with patch("ai_client.logger.error") as mock_error:
+        with patch("src.ai_client.logger.error") as mock_error:
             response = await generate_ai_response("Hello", [])
 
             assert "having trouble thinking" in response
@@ -387,7 +387,7 @@ class TestEnvironmentIntegration:
         # Test with environment variable
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             # Import client after setting env var
-            from ai_client import client
+            from src.ai_client import client
 
             assert hasattr(client, "api_key")
 
@@ -395,7 +395,7 @@ class TestEnvironmentIntegration:
         """Test behavior when API key is missing."""
         with patch.dict(os.environ, {}, clear=True):
             # Should not raise an error during import
-            from ai_client import client
+            from src.ai_client import client
 
             # Client should be created but with empty API key
             assert hasattr(client, "api_key")

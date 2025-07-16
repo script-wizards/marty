@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools.conversation.manager import (
+from src.tools.conversation.manager import (
     ConversationContext,
     ConversationManagerTool,
     ConversationMessage,
@@ -134,8 +134,8 @@ class TestConversationManagerTool:
         assert len(deserialized.messages) == len(sample_conversation_context.messages)
 
     @pytest.mark.asyncio
-    @patch("database.init_database")
-    @patch("database.AsyncSessionLocal")
+    @patch("src.database.init_database")
+    @patch("src.database.AsyncSessionLocal")
     async def test_load_conversation_from_database(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):
@@ -167,15 +167,15 @@ class TestConversationManagerTool:
         # Mock database functions
         with (
             patch(
-                "tools.conversation.manager.get_customer_by_phone",
+                "src.tools.conversation.manager.get_customer_by_phone",
                 return_value=mock_customer,
             ),
             patch(
-                "tools.conversation.manager.get_active_conversation",
+                "src.tools.conversation.manager.get_active_conversation",
                 return_value=mock_conversation,
             ),
             patch(
-                "tools.conversation.manager.get_conversation_messages",
+                "src.tools.conversation.manager.get_conversation_messages",
                 return_value=[mock_message],
             ),
         ):
@@ -188,8 +188,8 @@ class TestConversationManagerTool:
             assert context.messages[0].content == "Hello"
 
     @pytest.mark.asyncio
-    @patch("database.init_database")
-    @patch("database.AsyncSessionLocal")
+    @patch("src.database.init_database")
+    @patch("src.database.AsyncSessionLocal")
     async def test_create_new_conversation(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):
@@ -211,13 +211,15 @@ class TestConversationManagerTool:
 
         with (
             patch(
-                "tools.conversation.manager.get_customer_by_phone", return_value=None
+                "src.tools.conversation.manager.get_customer_by_phone",
+                return_value=None,
             ),
             patch(
-                "tools.conversation.manager.create_customer", return_value=mock_customer
+                "src.tools.conversation.manager.create_customer",
+                return_value=mock_customer,
             ),
             patch(
-                "tools.conversation.manager.create_conversation",
+                "src.tools.conversation.manager.create_conversation",
                 return_value=mock_conversation,
             ),
         ):
