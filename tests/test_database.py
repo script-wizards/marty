@@ -590,6 +590,7 @@ class TestRateLimitCRUD:
         assert cleaned_count >= 0  # Should clean up at least the expired record
 
 
+@pytest.mark.integration
 class TestDatabaseIntegration:
     """Test database integration and relationships."""
 

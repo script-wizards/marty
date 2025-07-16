@@ -79,6 +79,9 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration (deselect with '-m \"not integration\"')",
+]
 
 [build-system]
 requires = ["hatchling"]

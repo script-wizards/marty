@@ -37,7 +37,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(PROJECT_ROOT / "logs" / "chat_with_marty.log"),
+        logging.FileHandler(str(PROJECT_ROOT / "logs" / "chat.log")),
         logging.StreamHandler(),
     ],
 )
@@ -113,7 +113,7 @@ class MartyChat:
         """Print the chat banner."""
         banner = f"""
 {Fore.CYAN}🧙 Marty Terminal Chat{Style.RESET_ALL}
-{Fore.CYAN}{'=' * 40}{Style.RESET_ALL}
+{Fore.CYAN}{"=" * 40}{Style.RESET_ALL}
 {Fore.YELLOW}Commands:{Style.RESET_ALL}
 """
         for cmd, desc in self.config.commands.items():

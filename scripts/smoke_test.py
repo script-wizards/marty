@@ -66,6 +66,15 @@ class SmokeTestRunner:
 
     async def test_claude_integration(self) -> bool:
         """Test Claude AI integration."""
+        # Only run real API tests if explicitly enabled
+        if not os.getenv("MARTY_ENABLE_REAL_API_TESTS"):
+            self._log_test(
+                "Claude AI",
+                True,
+                "Skipped (use MARTY_ENABLE_REAL_API_TESTS=1 to test real API)",
+            )
+            return True
+
         try:
             from ai_client import ConversationMessage, generate_ai_response
 

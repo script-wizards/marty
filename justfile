@@ -1,131 +1,137 @@
 # Marty - AI Bookstore Chatbot Justfile
 # Just is a command runner: https://github.com/casey/just
 
-# Default recipe - show available commands
+# Show available commands
 default:
     @just --list
 
-# Dependency Management
+# Install all dependencies using uv
 install:
-    # Install all dependencies using uv
     uv sync
 
+# Install dependencies including development tools
 install-dev:
-    # Install dependencies including development tools
     uv sync --group dev
 
+# Add a production dependency
 add package:
-    # Add a production dependency
     uv add {{package}}
 
+# Add a development dependency
 add-dev package:
-    # Add a development dependency
     uv add --group dev {{package}}
 
-# Development Server
+# Start development server with hot reload
 dev:
-    # Start development server with hot reload
     uv run fastapi dev main.py
 
+# Start production server
 run:
-    # Start production server
     python main.py
 
-# Testing
+# Run all tests
 test:
-    # Run all tests
     pytest
 
+# Run tests with verbose output
 test-verbose:
-    # Run tests with verbose output
     pytest -v
 
+# Run specific test file
 test-file file:
-    # Run specific test file
     pytest tests/{{file}}
 
+# Run tests with coverage report
 test-cov:
-    # Run tests with coverage report
     pytest --cov=. --cov-report=html
 
-# Code Quality
+# Format code with ruff
 format:
-    # Format code with ruff
     ruff format .
 
+# Lint code with ruff
 lint:
-    # Lint code with ruff
     ruff check .
 
+# Auto-fix linting issues
 lint-fix:
-    # Auto-fix linting issues
     ruff check --fix .
 
+# Type check with ty
 check:
-    # Run format and lint checks
+    uv run ty check .
+
+# Run format and lint checks
+check-all:
     just format
     just lint
+    just check
 
-# Database Operations
+# Apply database migrations
 db-migrate:
-    # Apply database migrations
     alembic upgrade head
 
+# Rollback last migration
 db-rollback:
-    # Rollback last migration
     alembic downgrade -1
 
+# Reset database to base and reapply all migrations
 db-reset:
-    # Reset database to base and reapply all migrations
     alembic downgrade base
     alembic upgrade head
 
+# Generate new migration
 db-revision message:
-    # Generate new migration
     alembic revision --autogenerate -m "{{message}}"
 
-# Development Scripts
+# Start interactive chat with Marty (internal testing)
 chat:
-    # Start interactive chat with Marty (internal testing)
-    python scripts/chat_with_marty.py
+    python scripts/chat.py
 
+# Run comprehensive integration test (costs money)
 smoke-test:
-    # Run comprehensive integration test (⚠️ costs money)
     python scripts/smoke_test.py
 
+# Test database connection
 test-db:
-    # Test database connection
     python database.py
 
-# Setup and Installation
-setup:
-    # Complete project setup
+# Start test infrastructure (PostgreSQL + Redis for testing)
+test-infra-up:
+    docker-compose -f docker-compose.test.yml up -d
+
+# Stop test infrastructure
+test-infra-down:
+    docker-compose -f docker-compose.test.yml down -v
+
+# Run all tests with test infra
+test-all: test-infra-up
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5433/marty_test TEST_REDIS_URL=redis://localhost:6380 pytest
+    just test-infra-down
+
+# Complete project setup
+setup: install-dev pre-commit-install
     @echo "Setting up Marty project..."
-    just install-dev
-    @echo "Installing pre-commit hooks..."
-    pre-commit install
     @echo "Setup complete! Don't forget to:"
     @echo "1. Copy .env.example to .env"
     @echo "2. Add your API keys to .env"
     @echo "3. Run 'just db-migrate' to setup database"
 
+# Create .env file from example
 setup-env:
-    # Create .env file from example
     cp .env.example .env
     @echo "Created .env file. Please edit with your API keys."
 
-# Pre-commit
+# Install pre-commit hooks
 pre-commit-install:
-    # Install pre-commit hooks
     pre-commit install
 
+# Run pre-commit on all files
 pre-commit-run:
-    # Run pre-commit on all files
     pre-commit run --all-files
 
-# Cleanup
+# Clean up generated files
 clean:
-    # Clean up generated files
     rm -rf .pytest_cache
     rm -rf .ruff_cache
     rm -rf htmlcov
@@ -133,17 +139,15 @@ clean:
     find . -type f -name "*.pyc" -delete
     find . -type d -name "__pycache__" -delete
 
-# Health Checks
+# Check system health
 health:
-    # Check system health
     @echo "Testing database connection..."
     just test-db
     @echo "Running basic tests..."
     just test
 
-# Help
+# Show detailed help for all commands
 help:
-    # Show detailed help for all commands
     @echo "Marty - AI Bookstore Chatbot"
     @echo ""
     @echo "Development:"
@@ -159,7 +163,8 @@ help:
     @echo "Code Quality:"
     @echo "  just format       - Format code"
     @echo "  just lint         - Lint code"
-    @echo "  just check        - Format and lint"
+    @echo "  just check        - Type check with ty"
+    @echo "  just check-all    - Format, lint, and type check"
     @echo ""
     @echo "Database:"
     @echo "  just db-migrate   - Apply migrations"
@@ -171,3 +176,24 @@ help:
     @echo "  just install-dev  - Install with dev tools"
     @echo "  just add          - Add production dependency"
     @echo "  just add-dev      - Add development dependency"
+
+# Run lint, type check, and unit tests (fast, no infra)
+ci:
+    just lint
+    just check
+    pytest -m "not integration"
+
+# Run lint, type check, and all tests (with infra)
+ci-full:
+    just lint
+    just check
+    just test-all
+
+# Run only integration tests (requires test infra)
+test-integration: test-infra-up
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5433/marty_test TEST_REDIS_URL=redis://localhost:6380 pytest -m integration
+    just test-infra-down
+
+# Watch for changes and restart development server
+watch:
+    find . -name "*.py" | entr -r just dev

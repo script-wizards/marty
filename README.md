@@ -23,12 +23,15 @@ marty is a burnt-out wizard who used to do software engineering and now works at
 - hardcover api for book data
 - pytest for testing
 - ruff for code quality
+- ty for type checking
 - uv for dependency management
+- just for command running
 
 ## Requirements
 
 - python 3.13+
 - uv (for dependency management)
+- just (for command running)
 - postgresql database (supabase recommended)
 - anthropic api key
 - hardcover api token
@@ -40,12 +43,15 @@ marty is a burnt-out wizard who used to do software engineering and now works at
 # install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# install just command runner
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/bin
+
 # clone repository
 git clone <repository-url>
 cd marty
 
-# create virtual environment and install dependencies
-uv sync
+# complete project setup
+just setup
 ```
 
 ### Environment Setup
@@ -138,54 +144,115 @@ response:
 
 **Interactive Testing** (internal use only):
 ```bash
-python scripts/chat_with_marty.py
+just chat
 ```
 Terminal chat interface for testing AI responses without SMS pipeline.
 
 **Integration Testing** (⚠️ costs money):
 ```bash
-python scripts/smoke_test.py
+# enable real API calls and run smoke test
+MARTY_ENABLE_REAL_API_TESTS=1 just smoke-test
 ```
 Comprehensive test of all integrations: Claude AI, Hardcover API, and database.
 Makes real API calls - use sparingly.
 
 ### Test Suite
+
+**Unit Tests** (fast, no infrastructure):
 ```bash
-# run all tests
-pytest
+# run unit tests only
+just ci
 
-# specific test files
-pytest tests/test_ai_client.py
-pytest tests/test_chat_endpoint.py
-pytest tests/test_database.py
-
-# with coverage
-pytest --cov=. --cov-report=html
+# or manually
+pytest -m "not integration"
 ```
 
-### Code Quality
+**Integration Tests** (requires infrastructure):
 ```bash
-# install pre-commit hooks
-pre-commit install
+# run all tests including integration
+just test-all
 
+# run only integration tests
+just test-integration
+```
+
+**Additional Test Commands**:
+```bash
+# specific test files
+just test-file test_ai_client.py
+
+# with coverage
+just test-cov
+
+# verbose output
+just test-verbose
+```
+
+**AI Testing**: All Claude AI calls are automatically mocked in tests to prevent costs. Real API calls only happen in smoke tests when `MARTY_ENABLE_REAL_API_TESTS=1` is set.
+
+### Code Quality
+
+**Pre-commit Hooks** (recommended):
+```bash
+# install hooks (runs linting, type checking, and unit tests)
+just pre-commit-install
+
+# run all pre-commit checks manually
+just pre-commit-run
+```
+
+**Manual Code Quality**:
+```bash
 # format code
-ruff format .
+just format
 
 # lint code
-ruff check .
+just lint
+
+# type check
+just check
+
+# run all checks
+just check-all
 ```
 
 ### Database Migrations
 ```bash
 # generate migration
-alembic revision --autogenerate -m "description"
+just db-revision "description"
 
 # apply migrations
-alembic upgrade head
+just db-migrate
 
 # rollback
-alembic downgrade -1
+just db-rollback
+
+# reset database
+just db-reset
 ```
+
+## CI/CD Infrastructure
+
+**Available Commands**:
+```bash
+# show all available commands
+just --list
+
+# fast CI checks (no infrastructure)
+just ci
+
+# full CI with integration tests
+just ci-full
+
+# watch mode for development
+just watch
+```
+
+**Test Infrastructure**:
+- Docker Compose setup for isolated testing
+- PostgreSQL and Redis containers for integration tests
+- Automatic infrastructure management with `just test-all`
+- CI-ready with proper test isolation
 
 ## Configuration
 
@@ -254,20 +321,19 @@ in development:
 ### Database Issues
 ```bash
 # test connection
-python database.py
+just test-db
 
 # check environment
 echo $DATABASE_URL
 
 # reset database
-alembic downgrade base
-alembic upgrade head
+just db-reset
 ```
 
 ### Claude AI Issues
 ```bash
 # test integration (⚠️ costs money)
-python scripts/smoke_test.py
+MARTY_ENABLE_REAL_API_TESTS=1 just smoke-test
 
 # check api key
 echo $ANTHROPIC_API_KEY
@@ -275,11 +341,29 @@ echo $ANTHROPIC_API_KEY
 
 ### Test Failures
 ```bash
+# run unit tests only (fast)
+just ci
+
 # verbose output
-pytest -v
+just test-verbose
 
 # specific test with output
-pytest tests/test_database.py -v -s
+just test-file test_database.py
+
+# check if integration tests need infrastructure
+just test-integration
+```
+
+### CI/CD Issues
+```bash
+# check pre-commit setup
+just pre-commit-run
+
+# verify all quality checks pass
+just check-all
+
+# full CI pipeline
+just ci-full
 ```
 
 ### Debug Mode
@@ -294,9 +378,15 @@ LOG_LEVEL=DEBUG
 1. fork repository
 2. create feature branch
 3. make changes
-4. run tests: pytest
-5. run linting: ruff check .
-6. submit pull request
+4. run quality checks: `just check-all`
+5. run tests: `just ci`
+6. commit (pre-commit hooks run automatically)
+7. submit pull request
+
+**Development Workflow**:
+- Use `just ci` for fast feedback during development
+- Use `just test-all` for comprehensive testing before commits
+- Pre-commit hooks enforce code quality automatically
 
 ## License
 
