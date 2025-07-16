@@ -93,11 +93,11 @@ db-revision message:
 
 # Start interactive chat with Marty (internal testing)
 chat:
-    python src/scripts/chat.py
+    python scripts/chat.py
 
 # Run comprehensive integration test (costs money)
 smoke-test:
-    python src/scripts/smoke_test.py
+    python scripts/smoke_test.py
 
 # Test database connection
 test-db:

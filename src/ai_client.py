@@ -29,13 +29,19 @@ class ConversationMessage(BaseModel):
     timestamp: datetime
 
 
-def load_system_prompt(prompt_file: str = "../prompts/marty_system_prompt.md") -> str:
-    """Load the system prompt from a file."""
+def load_system_prompt(prompt_file: str | Path | None = None) -> str:
+    """Load the system prompt from the prompts directory, robust to invocation context."""
+    if prompt_file is None:
+        prompt_path = (
+            Path(__file__).parent.parent / "prompts" / "marty_system_prompt.md"
+        )
+    else:
+        prompt_path = Path(prompt_file)
+
     try:
-        prompt_path = Path(__file__).parent / prompt_file
         return prompt_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
-        logger.warning(f"Prompt file {prompt_file} not found. Using fallback prompt.")
+        logger.warning(f"Prompt file {prompt_path} not found. Using fallback prompt.")
         return "You are Marty, a helpful AI assistant who works at Dungeon Books. Help customers find great books!"
 
 
