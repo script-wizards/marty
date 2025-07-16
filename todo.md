@@ -111,7 +111,7 @@
 ### Logging & Error Handling
 
 - [x] Set up structured JSON logging (via ruff configuration)
-- [ ] Implement correlation ID generation
+- [~] Implement correlation ID generation
 - [x] Create error handling middleware (FastAPI built-in)
 - [x] Map exceptions to HTTP status codes
 - [x] Ensure no internal errors leak
@@ -120,8 +120,8 @@
 ### Deployment Config
 
 - [x] Create pyproject.toml
-- [ ] Create railway.toml
-- [ ] Add Procfile if needed
+- [~] Create railway.toml
+- [~] Add Procfile if needed
 - [x] Configure port binding
 - [x] Set up environment detection
 
@@ -132,7 +132,7 @@
 - [x] Test error handling
 - [x] Test configuration loading
 - [x] Test logging output
-- [ ] Verify Railway configuration
+- [~] Verify Railway configuration
 
 ## Step 3: SMS Webhook Handler
 
@@ -254,21 +254,21 @@
 
 ### Inventory Management
 
-- [ ] Implement check_inventory
-- [ ] Implement update_inventory
-- [ ] Track store vs bookshop availability
-- [ ] Generate bookshop.org affiliate links
-- [ ] Use Redis for intelligent inventory caching
-- [ ] Add background tasks for inventory updates
+- [~] Implement check_inventory
+- [~] Implement update_inventory
+- [~] Track store vs bookshop availability
+- [~] Generate bookshop.org affiliate links
+- [~] Use Redis for intelligent inventory caching
+- [~] Add background tasks for inventory updates
 
 ### Book Data Features
 
-- [ ] Merge API data with inventory
-- [ ] Cache book data in Redis with proper invalidation
-- [ ] Extract book mentions from text using simple text processing
-- [ ] Track ISBN detection with validation
-- [ ] Handle fuzzy title matching (start simple, can enhance later)
-- [ ] Implement text-based book matching
+- [~] Merge API data with inventory
+- [~] Cache book data in Redis with proper invalidation
+- [~] Extract book mentions from text using simple text processing
+- [~] Track ISBN detection with validation
+- [~] Handle fuzzy title matching (start simple, can enhance later)
+- [~] Implement text-based book matching
 
 ### Book Service Testing
 
@@ -535,35 +535,35 @@
 
 ### Background Tasks
 
-- [ ] Expire old conversations with Redis TTL
-- [ ] Clean up cache with intelligent invalidation
-- [ ] Collect metrics with OpenTelemetry
-- [ ] Process pending messages with queues
-- [ ] Handle retries with exponential backoff
+- [~] Expire old conversations with Redis TTL
+- [~] Clean up cache with intelligent invalidation
+- [~] Collect metrics with OpenTelemetry
+- [~] Process pending messages with queues
+- [~] Handle retries with exponential backoff
 
 ### Configuration
 
-- [ ] Validate all env vars with Pydantic settings
-- [ ] Set production defaults with environment detection
-- [ ] Add config validation on startup
-- [ ] Environment detection with proper overrides
-- [ ] Secret management with secure storage
+- [~] Validate all env vars with Pydantic settings
+- [~] Set production defaults with environment detection
+- [~] Add config validation on startup
+- [~] Environment detection with proper overrides
+- [~] Secret management with secure storage
 
 ### Deployment Prep
 
 - [x] Finalize pyproject.toml with all dependencies
-- [ ] Update railway.toml with modern configuration
-- [ ] Create startup script with health checks
-- [ ] Add enhanced health checks with dependency monitoring
-- [ ] Configure structured logging with correlation IDs
+- [~] Update railway.toml with modern configuration
+- [~] Create startup script with health checks
+- [~] Add enhanced health checks with dependency monitoring
+- [~] Configure structured logging with correlation IDs
 
 ### End-to-End Testing
 
 - [x] Test new customer flow with realistic scenarios
 - [x] Test returning customer with conversation history
-- [ ] Test complete purchase with payment integration
-- [ ] Test error scenarios with chaos engineering
-- [ ] Test rate limiting with burst traffic
+- [~] Test complete purchase with payment integration
+- [~] Test error scenarios with chaos engineering
+- [~] Test rate limiting with burst traffic
 - [x] Test all integrations with comprehensive coverage
 
 ## Deployment & Launch
