@@ -1,0 +1,682 @@
+"""
+Hardcover API Tool - Provides access to Hardcover book data API.
+
+This tool wraps the Hardcover API GraphQL client to provide book search,
+book details, user recommendations, and trending books functionality.
+"""
+
+import asyncio
+import logging
+import time
+from datetime import datetime, timedelta
+from typing import Any
+
+from gql import Client, gql
+from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportError, TransportQueryError
+
+from config import config
+from tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
+
+
+class HardcoverAPIError(Exception):
+    """Base exception for Hardcover API errors."""
+
+    pass
+
+
+class HardcoverAuthError(HardcoverAPIError):
+    """Authentication/Authorization errors."""
+
+    pass
+
+
+class HardcoverRateLimitError(HardcoverAPIError):
+    """Rate limit exceeded (60 requests per minute)."""
+
+    pass
+
+
+class HardcoverTimeoutError(HardcoverAPIError):
+    """Query timeout exceeded (30 seconds max)."""
+
+    pass
+
+
+class RateLimiter:
+    """Simple rate limiter for API calls (60 requests per minute)."""
+
+    def __init__(self, max_requests: int = 60, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = []
+        self._lock = asyncio.Lock()
+
+    async def acquire(self):
+        """Wait if necessary to respect rate limits."""
+        async with self._lock:
+            now = time.monotonic()
+            # Remove old requests outside the window
+            self.requests = [
+                req_time
+                for req_time in self.requests
+                if now - req_time < self.window_seconds
+            ]
+
+            if len(self.requests) >= self.max_requests:
+                # Calculate wait time
+                oldest_request = self.requests[0]
+                wait_time = self.window_seconds - (now - oldest_request)
+                if wait_time > 0:
+                    logger.warning(
+                        f"Rate limit reached, waiting {wait_time:.1f} seconds"
+                    )
+                    await asyncio.sleep(wait_time + 0.1)  # Add small buffer
+                    # Recursive call to re-check
+                    return await self.acquire()
+
+            # Add current request
+            self.requests.append(now)
+
+
+class HardcoverTool(BaseTool):
+    """
+    Hardcover API Tool - Provides access to Hardcover book data API.
+
+    This tool wraps the Hardcover API GraphQL client to provide:
+    - Book search functionality
+    - Book details retrieval
+    - User recommendations
+    - Trending books
+    - Schema introspection
+    """
+
+    def __init__(
+        self,
+        retry_count: int = 3,
+        retry_delay: float = 1.0,
+        rate_limit_max_requests: int = 60,
+    ):
+        super().__init__()
+        if not config.HARDCOVER_API_TOKEN:
+            raise HardcoverAuthError("Hardcover API token not configured")
+
+        self.api_url = config.HARDCOVER_API_URL
+        self.headers = config.get_hardcover_headers()
+        self._client: Client | None = None
+        self.rate_limiter = RateLimiter(
+            max_requests=rate_limit_max_requests, window_seconds=60
+        )
+        self._retry_count = retry_count
+        self._retry_delay = retry_delay
+
+    @property
+    def name(self) -> str:
+        return "hardcover_api"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Provides access to Hardcover book data API. "
+            "Supports book search, book details, user recommendations, "
+            "trending books, and schema introspection."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "action": {
+                "type": "string",
+                "description": "Action to perform",
+                "enum": [
+                    "search_books",
+                    "search_books_raw",
+                    "get_book_by_id",
+                    "get_books_by_ids",
+                    "get_user_recommendations",
+                    "get_trending_books",
+                    "get_current_user",
+                    "introspect_schema",
+                ],
+            },
+            "query": {
+                "type": "string",
+                "description": "Search query (required for search_books actions)",
+            },
+            "book_id": {
+                "type": "integer",
+                "description": "Book ID (required for get_book_by_id action)",
+            },
+            "book_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "List of book IDs (required for get_books_by_ids action)",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of results to return (default: 5 for search, 10 for others)",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Number of results to skip (for pagination, default: 0)",
+            },
+            "from_date": {
+                "type": "string",
+                "description": "Start date in YYYY-MM-DD format (for trending books)",
+            },
+            "to_date": {
+                "type": "string",
+                "description": "End date in YYYY-MM-DD format (for trending books)",
+            },
+        }
+
+    def validate_input(self, **kwargs) -> bool:
+        """Validate input parameters."""
+        action = kwargs.get("action")
+
+        if not action:
+            return False
+
+        if action in ["search_books", "search_books_raw"]:
+            return bool(kwargs.get("query"))
+        elif action == "get_book_by_id":
+            return bool(kwargs.get("book_id"))
+        elif action == "get_books_by_ids":
+            book_ids = kwargs.get("book_ids")
+            return bool(book_ids and isinstance(book_ids, list) and len(book_ids) > 0)
+
+        # Other actions don't require additional parameters
+        return True
+
+    async def execute(self, **kwargs) -> ToolResult:
+        """Execute the Hardcover API action."""
+        if not self.validate_input(**kwargs):
+            return ToolResult(
+                success=False,
+                data=None,
+                error="Invalid parameters. Check action and required fields.",
+            )
+
+        try:
+            action = kwargs["action"]
+
+            if action == "search_books":
+                query = kwargs["query"]
+                limit = kwargs.get("limit", 5)
+                data = await self._search_books(query, limit)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "query": query, "limit": limit},
+                )
+
+            elif action == "search_books_raw":
+                query = kwargs["query"]
+                limit = kwargs.get("limit", 5)
+                data = await self._search_books_raw(query, limit)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "query": query, "limit": limit},
+                )
+
+            elif action == "get_book_by_id":
+                book_id = kwargs["book_id"]
+                data = await self._get_book_by_id(book_id)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "book_id": book_id},
+                )
+
+            elif action == "get_books_by_ids":
+                book_ids = kwargs["book_ids"]
+                data = await self._get_books_by_ids(book_ids)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "book_count": len(book_ids)},
+                )
+
+            elif action == "get_user_recommendations":
+                limit = kwargs.get("limit", 10)
+                data = await self._get_user_recommendations(limit)
+                return ToolResult(
+                    success=True, data=data, metadata={"action": action, "limit": limit}
+                )
+
+            elif action == "get_trending_books":
+                from_date = kwargs.get("from_date")
+                to_date = kwargs.get("to_date")
+                limit = kwargs.get("limit", 10)
+                offset = kwargs.get("offset", 0)
+                data = await self._get_trending_books(from_date, to_date, limit, offset)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={
+                        "action": action,
+                        "from_date": from_date,
+                        "to_date": to_date,
+                        "limit": limit,
+                    },
+                )
+
+            elif action == "get_current_user":
+                data = await self._get_current_user()
+                return ToolResult(success=True, data=data, metadata={"action": action})
+
+            elif action == "introspect_schema":
+                data = await self._introspect_schema()
+                return ToolResult(success=True, data=data, metadata={"action": action})
+
+            else:
+                return ToolResult(
+                    success=False, data=None, error=f"Unknown action: {action}"
+                )
+
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=str(e),
+                metadata={
+                    "error_type": type(e).__name__,
+                    "action": kwargs.get("action"),
+                },
+            )
+
+    async def _get_client(self) -> Client:
+        """Get or create the GraphQL client."""
+        if self._client is None:
+            transport = AIOHTTPTransport(
+                url=self.api_url,
+                headers=self.headers,
+                ssl=True,  # Enable SSL certificate verification for security
+                timeout=30,  # 30 second timeout as per API docs
+            )
+            self._client = Client(transport=transport, fetch_schema_from_transport=True)
+        return self._client
+
+    async def _execute_with_retry(self, query, variables=None):
+        """Execute a GraphQL query with rate limiting and retry logic."""
+        # Apply rate limiting
+        await self.rate_limiter.acquire()
+
+        last_error = None
+        for attempt in range(self._retry_count):
+            try:
+                client = await self._get_client()
+                async with client as session:
+                    self.logger.debug(
+                        f"Executing query (attempt {attempt + 1}/{self._retry_count})"
+                    )
+                    result = await session.execute(query, variable_values=variables)
+                    return result
+
+            except TransportQueryError as e:
+                # GraphQL errors (like field not found)
+                self.logger.error(f"GraphQL query error: {e}")
+                raise HardcoverAPIError(f"GraphQL query error: {e}") from e
+
+            except TransportError as e:
+                # Transport errors (network, timeout, etc)
+                if "401" in str(e) or "403" in str(e):
+                    raise HardcoverAuthError(f"Authentication failed: {e}") from e
+                elif "429" in str(e):
+                    # Rate limit hit despite our limiter - wait longer
+                    wait_time = (
+                        self._retry_delay * (attempt + 1) * 10
+                    )  # Progressive backoff for rate limits
+                    self.logger.warning(f"Rate limit hit, waiting {wait_time} seconds")
+                    await asyncio.sleep(wait_time)
+                    last_error = HardcoverRateLimitError(f"Rate limit exceeded: {e}")
+                elif "timeout" in str(e).lower():
+                    raise HardcoverTimeoutError(
+                        f"Query timeout (30s limit): {e}"
+                    ) from e
+                else:
+                    last_error = e
+                    if attempt < self._retry_count - 1:
+                        delay = self._retry_delay * (2**attempt)  # Exponential backoff
+                        self.logger.warning(
+                            f"Request failed, retrying in {delay}s: {e}"
+                        )
+                        await asyncio.sleep(delay)
+
+            except Exception as e:
+                self.logger.error(f"Unexpected error: {e}")
+                last_error = e
+                if attempt < self._retry_count - 1:
+                    delay = self._retry_delay * (2**attempt)
+                    await asyncio.sleep(delay)
+
+        # All retries failed
+        if isinstance(last_error, HardcoverAPIError):
+            raise last_error
+        else:
+            raise HardcoverAPIError(
+                f"Failed after {self._retry_count} attempts: {last_error}"
+            )
+
+    async def _search_books(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Search for books using Hardcover's search API (optimized for production)."""
+        search_query = gql(
+            """
+            query SearchBooks($query: String!, $limit: Int!) {
+                search(
+                    query: $query,
+                    query_type: "books",
+                    per_page: $limit,
+                    page: 1,
+                    sort: "activities_count:desc"
+                ) {
+                    error
+                    ids
+                    query
+                }
+            }
+        """
+        )
+
+        variables = {"query": query, "limit": limit}
+
+        self.logger.info(f"Searching books: query={query}, limit={limit}")
+        result = await self._execute_with_retry(search_query, variables)
+        search_result = result.get("search", {})
+
+        # If we got book IDs, fetch detailed info for them
+        book_ids = search_result.get("ids", [])
+        if book_ids:
+            # Limit to requested number of books
+            book_ids = book_ids[:limit]
+            return await self._get_books_by_ids(book_ids)
+
+        return []
+
+    async def _search_books_raw(self, query: str, limit: int = 5) -> dict[str, Any]:
+        """Search for books and return raw search results."""
+        search_query = gql(
+            """
+            query SearchBooksRaw($query: String!, $limit: Int!) {
+                search(
+                    query: $query,
+                    query_type: "books",
+                    per_page: $limit,
+                    page: 1,
+                    sort: "activities_count:desc"
+                ) {
+                    error
+                    ids
+                    query
+                    results
+                }
+            }
+        """
+        )
+
+        variables = {"query": query, "limit": limit}
+
+        self.logger.info(f"Searching books (raw): query={query}, limit={limit}")
+        result = await self._execute_with_retry(search_query, variables)
+        return result.get("search", {})
+
+    async def _get_book_by_id(self, book_id: int) -> dict[str, Any] | None:
+        """Get detailed book information by ID."""
+        query = gql(
+            """
+            query GetBook($id: Int!) {
+                books_by_pk(id: $id) {
+                    id
+                    title
+                    description
+                    isbn13
+                    pages
+                    release_year
+                    cached_contributors
+                    cached_tags
+                    slug
+                    image {
+                        url
+                    }
+                    contributions {
+                        author {
+                            id
+                            name
+                        }
+                    }
+                    book_category {
+                        id
+                        name
+                    }
+                }
+            }
+        """
+        )
+
+        variables = {"id": book_id}
+
+        self.logger.info(f"Getting book details: id={book_id}")
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books_by_pk")
+
+    async def _get_books_by_ids(self, book_ids: list[int]) -> list[dict[str, Any]]:
+        """Get detailed book information for multiple books by their IDs."""
+        query = gql(
+            """
+            query GetBooksByIds($ids: [Int!]!) {
+                books(where: {id: {_in: $ids}}) {
+                    id
+                    title
+                    description
+                    isbn13
+                    pages
+                    release_year
+                    cached_contributors
+                    cached_tags
+                    slug
+                    image {
+                        url
+                    }
+                    contributions {
+                        author {
+                            id
+                            name
+                        }
+                    }
+                    book_category {
+                        id
+                        name
+                    }
+                }
+            }
+        """
+        )
+
+        variables = {"ids": book_ids}
+
+        self.logger.info(
+            f"Getting books by IDs: ids={book_ids[:5]}{'...' if len(book_ids) > 5 else ''}"
+        )
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books", [])
+
+    async def _get_user_recommendations(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get personalized book recommendations for the authenticated user."""
+        query = gql(
+            """
+            query GetRecommendations($limit: Int!) {
+                recommendations(limit: $limit) {
+                    id
+                    book {
+                        id
+                        title
+                        description
+                        cached_contributors
+                        cached_tags
+                        slug
+                        image {
+                            url
+                        }
+                    }
+                }
+            }
+        """
+        )
+
+        variables = {"limit": limit}
+
+        self.logger.info(f"Getting user recommendations: limit={limit}")
+        result = await self._execute_with_retry(query, variables)
+        return result.get("recommendations", [])
+
+    async def _get_trending_books(
+        self,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Get currently trending/popular books for a date range."""
+        # Use relative dates if not provided
+        if from_date is None:
+            from_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        if to_date is None:
+            to_date = datetime.now().strftime("%Y-%m-%d")
+
+        query = gql(
+            """
+            query GetTrendingBooks($from: String!, $to: String!, $limit: Int!, $offset: Int!) {
+                books_trending(from: $from, to: $to, limit: $limit, offset: $offset) {
+                    error
+                    ids
+                }
+            }
+        """
+        )
+
+        variables = {"from": from_date, "to": to_date, "limit": limit, "offset": offset}
+
+        self.logger.info(
+            f"Getting trending books: from={from_date}, to={to_date}, limit={limit}"
+        )
+        result = await self._execute_with_retry(query, variables)
+        return result.get("books_trending", {})
+
+    async def _get_current_user(self) -> dict[str, Any]:
+        """Get current user information (test query)."""
+        query = gql(
+            """
+            query {
+                me {
+                    id
+                    username
+                    email
+                }
+            }
+        """
+        )
+
+        self.logger.info("Getting current user information")
+        return await self._execute_with_retry(query)
+
+    async def _introspect_schema(self) -> dict[str, Any]:
+        """Get the GraphQL schema for exploration."""
+        introspection_query = gql(
+            """
+            query IntrospectionQuery {
+                __schema {
+                    queryType { name }
+                    mutationType { name }
+                    subscriptionType { name }
+                    types {
+                        ...FullType
+                    }
+                }
+            }
+
+            fragment FullType on __Type {
+                kind
+                name
+                description
+                fields(includeDeprecated: true) {
+                    name
+                    description
+                    args {
+                        ...InputValue
+                    }
+                    type {
+                        ...TypeRef
+                    }
+                    isDeprecated
+                    deprecationReason
+                }
+                inputFields {
+                    ...InputValue
+                }
+                interfaces {
+                    ...TypeRef
+                }
+                enumValues(includeDeprecated: true) {
+                    name
+                    description
+                    isDeprecated
+                    deprecationReason
+                }
+                possibleTypes {
+                    ...TypeRef
+                }
+            }
+
+            fragment InputValue on __InputValue {
+                name
+                description
+                type { ...TypeRef }
+                defaultValue
+            }
+
+            fragment TypeRef on __Type {
+                kind
+                name
+                ofType {
+                    kind
+                    name
+                    ofType {
+                        kind
+                        name
+                        ofType {
+                            kind
+                            name
+                            ofType {
+                                kind
+                                name
+                                ofType {
+                                    kind
+                                    name
+                                    ofType {
+                                        kind
+                                        name
+                                        ofType {
+                                            kind
+                                            name
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        """
+        )
+
+        self.logger.info("Introspecting GraphQL schema")
+        return await self._execute_with_retry(introspection_query)
+
+    async def close(self) -> None:
+        """Close the client connection."""
+        if self._client:
+            await self._client.close_async()
+            self._client = None

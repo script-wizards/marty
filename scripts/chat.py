@@ -29,6 +29,9 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Create logs directory if it doesn't exist
+(PROJECT_ROOT / "logs").mkdir(exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -82,7 +85,6 @@ class MartyChat:
         self.config = config or ChatConfig()
         self.conversation_history: list[Any] = []
         self.customer_context = self._initialize_context()
-        self._setup_logging()
 
     def _initialize_context(self) -> dict[str, Any]:
         """Initialize customer context with current time information."""
@@ -95,11 +97,6 @@ class MartyChat:
             "current_date": now.strftime("%Y-%m-%d"),
             "current_day": now.strftime("%A"),
         }
-
-    def _setup_logging(self) -> None:
-        """Setup logging directory if it doesn't exist."""
-        log_dir = PROJECT_ROOT / "logs"
-        log_dir.mkdir(exist_ok=True)
 
     def _update_time_context(self) -> None:
         """Update time-related context fields."""
