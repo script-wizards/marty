@@ -15,7 +15,7 @@ from src.tools.conversation.manager import (
 @pytest.fixture
 async def tool():
     """Create a ConversationManagerTool instance for testing."""
-    redis_url = os.getenv("TEST_REDIS_URL", "redis://localhost:6380/1")
+    redis_url = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/1")
     tool = ConversationManagerTool(redis_url)
     yield tool
     await tool.close()
