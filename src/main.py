@@ -28,13 +28,21 @@ from src.database import (
     init_db,
 )
 
-# Configure structured logging for Railway
+
+def rename_event_to_message(logger, method_name, event_dict):
+    """Rename 'event' field to 'message' for Railway compatibility."""
+    if "event" in event_dict:
+        event_dict["message"] = event_dict.pop("event")
+    return event_dict
+
+
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.format_exc_info,
+        rename_event_to_message,
         structlog.processors.JSONRenderer(),
     ],
     context_class=dict,
