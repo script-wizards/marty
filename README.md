@@ -1,5 +1,7 @@
 # Marty - AI Bookstore Chatbot
 
+[![Railway Deployment](https://img.shields.io/badge/Railway-Deployed-brightgreen)](https://railway.com/project/9ae0f484-5538-4866-9757-a6931049b1e9?environmentId=dddc87ce-de5b-4928-8e27-3c40c088ef05)
+
 an ai chatbot that recommends books via text. powered by claude ai.
 
 marty is a burnt-out wizard who used to do software engineering and now works at dungeon books. he's genuinely magical but completely casual about it.
@@ -403,6 +405,15 @@ LOG_LEVEL=DEBUG
 - Use `just ci` for fast feedback during development
 - Use `just test-all` for comprehensive testing before commits
 - Pre-commit hooks enforce code quality automatically
+
+## Monitoring
+
+### Railway Built-in Monitoring
+
+- **Health Check**: `/health` endpoint monitors database connectivity and migration status
+- **Logs**: Railway provides real-time logs in dashboard
+- **Metrics**: Built-in Railway metrics for CPU, memory, and request volume
+- **Deployment**: [Railway Project Dashboard](https://railway.com/project/9ae0f484-5538-4866-9757-a6931049b1e9?environmentId=dddc87ce-de5b-4928-8e27-3c40c088ef05)
 
 ## License
 

@@ -31,25 +31,59 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def validate_environment_variables() -> None:
+    """Validate required environment variables on startup."""
+    required_vars = [
+        "ANTHROPIC_API_KEY",
+        "SECRET_KEY",
+    ]
+
+    missing_vars = []
+    for var in required_vars:
+        if not os.getenv(var):
+            missing_vars.append(var)
+
+    if missing_vars:
+        raise ValueError(
+            f"Missing required environment variables: {', '.join(missing_vars)}"
+        )
+
+    # Log configuration (without secrets)
+    logger.info(f"Environment: {os.getenv('ENV', 'development')}")
+    logger.info(f"Database URL configured: {bool(os.getenv('DATABASE_URL'))}")
+    logger.info(f"Anthropic API key configured: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
+    logger.info(f"Hardcover API key configured: {bool(os.getenv('HARDCOVER_API_KEY'))}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan (startup and shutdown)."""
     # Startup
     try:
+        validate_environment_variables()
+        logger.info("Environment variables validated")
+
         await init_db()
         logger.info("Database initialized successfully")
+
+        logger.info("Marty chatbot started successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"Failed to initialize application: {e}")
         raise
 
     yield
 
     # Shutdown
     try:
+        logger.info("Shutting down Marty chatbot...")
+
         await close_db()
         logger.info("Database connections closed")
+
+        logger.info("Marty chatbot shutdown complete")
     except Exception as e:
-        logger.error(f"Error closing database connections: {e}")
+        logger.error(f"Error during shutdown: {e}")
+        # Don't raise during shutdown to allow graceful termination
 
 
 app = FastAPI(
@@ -207,6 +241,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 if __name__ == "__main__":
+    import asyncio
+    import signal
+
     import hypercorn.asyncio
     from hypercorn.config import Config
 
@@ -214,7 +251,35 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     config.bind = [f"[::]:{port}"]  # Dual-stack IPv4/IPv6 binding for Railway
     config.use_reloader = os.getenv("ENV") == "development"
+    config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
-    import asyncio
+    async def shutdown_trigger():
+        """Wait for shutdown signal and trigger graceful shutdown."""
+        shutdown_event = asyncio.Event()
 
-    asyncio.run(hypercorn.asyncio.serve(app, config))  # type: ignore
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+            shutdown_event.set()
+
+        # Set up signal handlers for graceful shutdown
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, signal_handler)
+        if hasattr(signal, "SIGINT"):
+            signal.signal(signal.SIGINT, signal_handler)
+
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+
+    async def serve_with_graceful_shutdown():
+        """Serve the application with graceful shutdown handling."""
+        try:
+            await hypercorn.asyncio.serve(
+                app, config, shutdown_trigger=shutdown_trigger
+            )
+        except asyncio.CancelledError:
+            logger.info("Server shutdown cancelled")
+        except Exception as e:
+            logger.error(f"Server error: {e}")
+            raise
+
+    asyncio.run(serve_with_graceful_shutdown())
