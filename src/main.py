@@ -67,6 +67,16 @@ def validate_environment_variables() -> None:
         "HARDCOVER_API_TOKEN",
     ]
 
+    # SMS-specific validation (only if SMS features are enabled)
+    sms_enabled = os.getenv("SMS_MULTI_MESSAGE_ENABLED", "true").lower() == "true"
+    if sms_enabled:
+        sms_required_vars = [
+            "SINCH_API_TOKEN",
+            "SINCH_SERVICE_PLAN_ID",
+            "SINCH_WEBHOOK_SECRET",
+        ]
+        required_vars.extend(sms_required_vars)
+
     missing_vars = []
     for var in required_vars:
         if not os.getenv(var):
@@ -83,6 +93,8 @@ def validate_environment_variables() -> None:
     logger.info(
         f"Hardcover API key configured: {bool(os.getenv('HARDCOVER_API_TOKEN'))}"
     )
+    if sms_enabled:
+        logger.info(f"SMS features enabled: {bool(os.getenv('SINCH_API_TOKEN'))}")
 
 
 @asynccontextmanager

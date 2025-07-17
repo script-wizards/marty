@@ -41,6 +41,7 @@ class Config:
     SMS_MESSAGE_DELAY: float = float(
         os.getenv("SMS_MESSAGE_DELAY", "0.5")
     )  # seconds between messages
+    DEFAULT_PHONE_REGION: str = os.getenv("DEFAULT_PHONE_REGION", "US")
 
     @classmethod
     def validate_hardcover_setup(cls) -> bool:

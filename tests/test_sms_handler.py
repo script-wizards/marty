@@ -185,7 +185,7 @@ class TestRateLimiting:
         mock_redis.incr.return_value = 6  # Exceeds limit of 5
         with pytest.raises(HTTPException) as exc_info:
             await rate_limit("+12125551234", mock_redis)
-        exception: HTTPException = exc_info.value  # type: ignore
+        exception = exc_info.value
         assert exception.status_code == 429
         assert "whoa slow down there, give me a sec to catch up" in str(
             exception.detail
@@ -209,7 +209,7 @@ class TestRateLimiting:
         ]  # rate=3 (OK), burst=11 (exceeds limit of 10)
         with pytest.raises(HTTPException) as exc_info:
             await rate_limit("+12125551234", mock_redis)
-        exception: HTTPException = exc_info.value  # type: ignore
+        exception = exc_info.value
         assert exception.status_code == 429
         assert "whoa slow down there, give me a sec to catch up" in str(
             exception.detail
