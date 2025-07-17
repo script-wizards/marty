@@ -6,11 +6,12 @@ against the Hardcover API, and stores verified books in the database.
 """
 
 import json
-import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+import structlog
 
 import src.database as database
 from src.database import (
@@ -20,7 +21,7 @@ from src.database import (
 from src.tools.base import BaseTool, ToolResult
 from src.tools.external.hardcover import HardcoverAPIError, HardcoverTool
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

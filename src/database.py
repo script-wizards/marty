@@ -3,7 +3,6 @@ Database module for Marty SMS Bookstore Chatbot.
 Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 """
 
-import logging
 import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -11,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import (
     JSON,
@@ -32,7 +32,7 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
 
 # Setup logger
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # SQLAlchemy setup
 Base = declarative_base()
@@ -527,9 +527,9 @@ async def init_db():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        print("✅ Database tables created successfully")
+        logger.info("Database tables created successfully")
     except Exception as e:
-        print(f"❌ Failed to initialize database: {e}")
+        logger.error(f"Failed to initialize database: {e}")
         raise
 
 
@@ -544,10 +544,10 @@ async def test_db_connection():
         async with engine.begin() as conn:
             result = await conn.execute(func.now())
             timestamp = result.scalar()
-            print(f"✅ Database connection successful. Server time: {timestamp}")
-            return True
+            logger.info(f"Database connection successful. Server time: {timestamp}")
+        return True
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        logger.error(f"Database connection failed: {e}")
         return False
 
 

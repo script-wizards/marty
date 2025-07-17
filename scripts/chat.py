@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import colorama
+import structlog
 from colorama import Fore, Style
 from dotenv import load_dotenv
 
@@ -41,7 +42,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

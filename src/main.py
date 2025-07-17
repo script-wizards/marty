@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
+import structlog
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -19,6 +20,7 @@ from src.database import (
     close_db,
     create_conversation,
     create_customer,
+    engine,
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
@@ -26,9 +28,30 @@ from src.database import (
     init_db,
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure structured logging for Railway
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
+
+# Configure standard logging to work with structlog
+logging.basicConfig(
+    format="%(message)s",
+    level=logging.INFO,
+)
+
+logger = structlog.get_logger(__name__)
 
 
 def validate_environment_variables() -> None:
@@ -119,17 +142,22 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             from alembic.runtime.migration import MigrationContext
             from alembic.script import ScriptDirectory
 
-            async with db.begin():
-                migration_ctx = MigrationContext.configure(db.connection())
-                current_rev = migration_ctx.get_current_revision()
+            # Use sync connection from engine for migration check
+            if engine:
+                sync_engine = engine.sync_engine
+                with sync_engine.connect() as conn:
+                    migration_ctx = MigrationContext.configure(conn)
+                    current_rev = migration_ctx.get_current_revision()
 
-            script_dir = ScriptDirectory.from_config(alembic_cfg)
-            head_rev = script_dir.get_current_head()
+                script_dir = ScriptDirectory.from_config(alembic_cfg)
+                head_rev = script_dir.get_current_head()
 
-            if current_rev != head_rev:
-                migration_status = "pending"
+                if current_rev != head_rev:
+                    migration_status = "pending"
+            else:
+                migration_status = "unknown"
         except Exception as e:
-            logger.warning(f"Could not check migration status: {e}")
+            logger.debug(f"Could not check migration status: {e}")
             migration_status = "unknown"
 
         return {
