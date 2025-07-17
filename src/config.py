@@ -14,6 +14,7 @@ class Config:
     SINCH_SERVICE_PLAN_ID: str | None = os.getenv("SINCH_SERVICE_PLAN_ID")
     SINCH_API_TOKEN: str | None = os.getenv("SINCH_API_TOKEN")
     SINCH_API_URL: str = os.getenv("SINCH_API_URL", "https://us.sms.api.sinch.com")
+    SINCH_WEBHOOK_SECRET: str | None = os.getenv("SINCH_WEBHOOK_SECRET")
 
     # Hardcover API Configuration
     HARDCOVER_API_TOKEN: str | None = os.getenv("HARDCOVER_API_TOKEN")
@@ -32,6 +33,15 @@ class Config:
 
     # Bookshop.org Affiliate Integration (to be added)
     BOOKSHOP_AFFILIATE_ID: str | None = os.getenv("BOOKSHOP_AFFILIATE_ID")
+
+    # SMS Configuration
+    SMS_MULTI_MESSAGE_ENABLED: bool = (
+        os.getenv("SMS_MULTI_MESSAGE_ENABLED", "true").lower() == "true"
+    )
+    SMS_MESSAGE_DELAY: float = float(
+        os.getenv("SMS_MESSAGE_DELAY", "0.5")
+    )  # seconds between messages
+    DEFAULT_PHONE_REGION: str = os.getenv("DEFAULT_PHONE_REGION", "US")
 
     @classmethod
     def validate_hardcover_setup(cls) -> bool:

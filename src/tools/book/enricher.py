@@ -13,10 +13,10 @@ from typing import Any
 
 import structlog
 
-import src.database as database
 from src.database import (
     Book,
     BookCreate,
+    get_db_session,
 )
 from src.tools.base import BaseTool, ToolResult
 from src.tools.external.hardcover import HardcoverAPIError, HardcoverTool
@@ -57,7 +57,7 @@ class BookEnricherTool(BaseTool):
     1. Extract book mentions using Claude AI
     2. Validate books against Hardcover API
     3. Store validated books in database
-    4. Prepare data for RCS cards and recommendations
+    4. Prepare data for SMS cards and recommendations
     """
 
     def __init__(self, hardcover_tool: HardcoverTool | None = None):
@@ -322,12 +322,7 @@ Guidelines:
     async def _store_book(self, book_data: dict[str, Any]) -> None:
         """Store validated book in database."""
         try:
-            database.init_database()
-            if database.AsyncSessionLocal is None:
-                logger.error("Database not initialized: AsyncSessionLocal is None")
-                raise RuntimeError("Database not initialized")
-
-            async with database.AsyncSessionLocal() as session:
+            async with get_db_session() as session:
                 # Check if book already exists
                 from sqlalchemy import select
 

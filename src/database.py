@@ -5,6 +5,7 @@ Provides SQLAlchemy models, Pydantic schemas, and async database operations.
 
 import os
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -163,7 +164,7 @@ class Message(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    # SMS/RCS metadata
+    # SMS metadata
     message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="pending"
@@ -506,6 +507,24 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     if AsyncSessionLocal is None:
         logger.error("Database not initialized: AsyncSessionLocal is None")
         raise RuntimeError("Database not initialized")
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def get_db_session():
+    """Get database session as a context manager for background tasks."""
+    init_database()  # Ensure database is initialized
+    if AsyncSessionLocal is None:
+        logger.error("Database not initialized: AsyncSessionLocal is None")
+        raise RuntimeError("Database not initialized")
+
     async with AsyncSessionLocal() as session:
         try:
             yield session

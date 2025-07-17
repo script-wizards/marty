@@ -1,11 +1,11 @@
-# Dungeon Books RCS Wizard - Developer Specification
+# Dungeon Books SMS Wizard - Developer Specification
 
 ## Project Overview
 
 **Goal:** Text-based AI book recommendation system with personality-driven commerce integration
 **Timeline:** 2 weeks (hackathon scope)
 **Team:** Panat (generalist/AI/infra), Christian (Python/Postgres expert)
-**MVP Success:** Functional SMS/RCS bot that feels like texting a human bookseller
+**MVP Success:** Functional SMS bot that feels like texting a human bookseller
 
 ## Core Value Proposition
 
@@ -17,7 +17,7 @@ Customers text "Marty" (an AI wizard who used to work in tech) for book recommen
 
 - **Backend:** Python application on Railway
 - **Database:** Supabase (PostgreSQL)
-- **SMS/RCS:** Smobi (pending rep meeting)
+- **SMS:** Sinch SMS API
 - **AI:** Claude Sonnet 4 API
 - **Book Data:** Hardcover API
 - **Customer/Orders:** Square API
@@ -30,9 +30,9 @@ Customers text "Marty" (an AI wizard who used to work in tech) for book recommen
 ### Service Integration Flow
 
 ```
-SMS/RCS Message → Railway Webhook → Customer Lookup (Square) →
+SMS Message → Railway Webhook → Customer Lookup (Square) →
 Conversation Processing (Claude + Context) → Book Lookup (Hardcover/Inventory) →
-Response Generation → SMS/RCS Response
+Response Generation → SMS Response
 ```
 
 ## Database Schema (Supabase)
@@ -101,19 +101,18 @@ CREATE TABLE rate_limits (
 
 ## API Integrations
 
-### 1. SMS/RCS Provider (Smobi)
+### 1. SMS Provider (Sinch)
 
 **Webhook endpoint:** `POST /webhook/sms`
 
 ```python
-# Expected payload structure (to be confirmed with Smobi)
+# Sinch webhook payload structure
 {
-    "from": "+1234567890",
-    "to": "+1987654321",
-    "message": "hey marty",
-    "message_type": "RCS|SMS",
-    "timestamp": "2025-07-11T15:30:00Z",
-    "signature": "hmac_signature"
+    "body": "hey marty",
+    "from": "19876543210",
+    "to": "12345678900",
+    "id": "message-id",
+    "received_at": "2023-01-01T12:00:00Z"
 }
 ```
 
@@ -257,12 +256,7 @@ async def generate_marty_response(message: str, context: dict):
 ### Multi-Message Responses
 
 ```python
-def split_response(text: str, is_rcs: bool) -> List[str]:
-    if is_rcs:
-        # Send full response (up to 8000 chars)
-        return [text] if len(text) <= 8000 else split_at_sentences(text)
-    else:
-        # Split SMS at ~150 chars, natural breaks
+def split_response(text: str) -> List[str]:
         return split_sms_messages(text, max_length=150)
 ```
 
@@ -497,7 +491,7 @@ SQUARE_APPLICATION_ID = "sandbox-sq0idb-..."
 HARDCOVER_API_KEY = "hc_..."
 SUPABASE_URL = "https://..."
 SUPABASE_ANON_KEY = "eyJhbGc..."
-SMOBI_WEBHOOK_SECRET = "webhook_secret"
+SINCH_WEBHOOK_SECRET = "webhook_secret"
 ```
 
 ### Environment Variables
@@ -507,8 +501,9 @@ SMOBI_WEBHOOK_SECRET = "webhook_secret"
 CLAUDE_API_KEY=sk-ant-...
 
 # SMS Provider
-SMOBI_WEBHOOK_SECRET=webhook_secret
-SMOBI_API_KEY=smobi_key
+SINCH_API_TOKEN=your_sinch_api_token
+SINCH_SERVICE_PLAN_ID=your_service_plan_id
+SINCH_WEBHOOK_SECRET=webhook_secret
 
 # Square Integration
 SQUARE_ACCESS_TOKEN=EAAAl...
@@ -530,11 +525,11 @@ STORE_TIMEZONE=America/New_York
 
 ## Key Integration Points
 
-### Smobi Integration (Pending)
+### Sinch Integration (Pending)
 
 - Confirm webhook payload format
 - Set up phone number provisioning
-- Test RCS vs SMS detection
+- Test SMS detection
 - Configure message delivery options
 
 ### Square Integration Requirements
@@ -554,7 +549,7 @@ STORE_TIMEZONE=America/New_York
 
 ### Technical Goals
 
-- [ ] Functional SMS/RCS bidirectional communication
+- [ ] Functional SMS bidirectional communication
 - [ ] Sub-30 second response times for recommendations
 - [ ] Conversation context maintained across sessions
 - [ ] End-to-end purchase flow working
@@ -607,7 +602,7 @@ STORE_TIMEZONE=America/New_York
 
 ### External Dependencies
 
-- **Smobi rep:** SMS/RCS integration details
+- **Sinch:** SMS 10DLC Registration
 - **Square support:** API troubleshooting
 - **Hardcover:** Book data API access
 
