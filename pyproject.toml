@@ -23,6 +23,7 @@ dependencies = [
     "anthropic>=0.57.1",
     "redis>=6.2.0",
     "structlog>=25.4.0",
+    "sinch>=1.1.2",
 ]
 
 [project.optional-dependencies]

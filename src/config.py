@@ -14,6 +14,10 @@ class Config:
     SINCH_SERVICE_PLAN_ID: str | None = os.getenv("SINCH_SERVICE_PLAN_ID")
     SINCH_API_TOKEN: str | None = os.getenv("SINCH_API_TOKEN")
     SINCH_API_URL: str = os.getenv("SINCH_API_URL", "https://us.sms.api.sinch.com")
+    SINCH_WEBHOOK_SECRET: str | None = os.getenv("SINCH_WEBHOOK_SECRET")
+    SINCH_KEY_ID: str | None = os.getenv("SINCH_KEY_ID")
+    SINCH_KEY_SECRET: str | None = os.getenv("SINCH_KEY_SECRET")
+    SINCH_PROJECT_ID: str | None = os.getenv("SINCH_PROJECT_ID")
 
     # Hardcover API Configuration
     HARDCOVER_API_TOKEN: str | None = os.getenv("HARDCOVER_API_TOKEN")

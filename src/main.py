@@ -27,6 +27,7 @@ from src.database import (
     get_db,
     init_db,
 )
+from src.sms_handler import router as sms_router
 
 
 def rename_event_to_message(logger, method_name, event_dict):
@@ -118,6 +119,8 @@ app = FastAPI(
     description="AI-powered SMS chatbot for book recommendations and purchases",
     lifespan=lifespan,
 )
+
+app.include_router(sms_router)
 
 
 @app.get("/health")
