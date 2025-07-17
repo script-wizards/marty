@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import UTC, datetime
@@ -38,16 +39,17 @@ RATE_LIMIT_WINDOW = 60  # seconds
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
 MAX_UNICODE_LENGTH = 70  # Unicode SMS character limit
 
+# GSM-7 basic character set (strict - no accented characters)
+GSM7_BASIC = (
+    "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+)
+
 
 def is_gsm7(text: str) -> bool:
     """
     Check if the text contains only GSM-7 basic characters.
     """
-    # GSM-7 basic character set (strict - no accented characters)
-    GSM7_BASIC = (
-        "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    )
     for c in text:
         if c not in GSM7_BASIC:
             return False
@@ -58,11 +60,6 @@ def gsm7_safe(text: str) -> str:
     """
     Replace non-GSM-7 characters with '?'.
     """
-    # GSM-7 basic character set (strict - no accented characters)
-    GSM7_BASIC = (
-        "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    )
     return "".join(c if c in GSM7_BASIC else "?" for c in text)
 
 
@@ -163,8 +160,6 @@ async def send_multiple_sms(
             logger.info(f"Sent SMS {i + 1}/{len(messages)} to {to_phone}")
             # Add small delay between messages for natural flow
             if i < len(messages) - 1:
-                import asyncio
-
                 await asyncio.sleep(config.SMS_MESSAGE_DELAY)
         except Exception as e:
             logger.error(
@@ -280,7 +275,7 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
         # Send error message to user
         try:
             await get_sinch_client().send_sms(
-                body="Sorry, I'm having trouble processing your message right now. Please try again later! 🤖",
+                body="Sorry, I'm having trouble processing your message right now. Please try again later!",
                 to=[phone],
                 from_=payload.to["endpoint"],
             )
