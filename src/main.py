@@ -73,7 +73,6 @@ def validate_environment_variables() -> None:
         sms_required_vars = [
             "SINCH_API_TOKEN",
             "SINCH_SERVICE_PLAN_ID",
-            "SINCH_WEBHOOK_SECRET",
         ]
         required_vars.extend(sms_required_vars)
 

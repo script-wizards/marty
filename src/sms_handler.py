@@ -4,7 +4,16 @@ import os
 from datetime import UTC, datetime
 
 import redis.asyncio as redis
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import ValidationError
 
 from src.ai_client import ConversationMessage, generate_ai_response
@@ -25,7 +34,6 @@ from src.tools.external.sinch import (
     SinchSMSResponse,
     SinchSMSWebhookPayload,
     get_sinch_client,
-    verify_sinch_signature,
 )
 
 router = APIRouter()
@@ -358,24 +366,31 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             logger.error(f"Failed to send error message: {send_error}")
 
 
+security = HTTPBasic()
+
+SINCH_WEBHOOK_USERNAME = os.getenv("SINCH_WEBHOOK_USERNAME")
+SINCH_WEBHOOK_PASSWORD = os.getenv("SINCH_WEBHOOK_PASSWORD")
+
+
 @router.post("/webhook/sms", response_model=SinchSMSResponse)
 async def sms_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    x_sinch_signature: str = Header(...),
-    x_sinch_timestamp: str = Header(..., alias="X-Sinch-Timestamp"),
+    x_sinch_signature: str = Header(None),
+    x_sinch_timestamp: str = Header(None, alias="X-Sinch-Timestamp"),
     redis=Depends(get_redis),
+    credentials: HTTPBasicCredentials = Depends(security),
 ):
-    raw_body = await request.body()
-    # Verify signature and timestamp
-    if not config.SINCH_WEBHOOK_SECRET:
-        logger.error("Sinch webhook secret not configured")
-        raise HTTPException(status_code=500, detail="Webhook secret not configured")
-    if not verify_sinch_signature(
-        raw_body, x_sinch_signature, config.SINCH_WEBHOOK_SECRET, x_sinch_timestamp
+    if (
+        credentials.username != SINCH_WEBHOOK_USERNAME
+        or credentials.password != SINCH_WEBHOOK_PASSWORD
     ):
-        logger.warning("Invalid Sinch webhook signature or timestamp")
-        raise HTTPException(status_code=401, detail="Invalid signature or timestamp")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    raw_body = await request.body()
     # Parse payload
     try:
         payload = SinchSMSWebhookPayload.model_validate_json(raw_body)

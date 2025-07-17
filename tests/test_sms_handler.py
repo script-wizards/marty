@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 from unittest.mock import AsyncMock, patch
 
@@ -217,62 +218,71 @@ class TestRateLimiting:
 
 
 class TestSMSWebhook:
-    def test_webhook_missing_signature_header(self):
-        current_time = str(int(time.time()))
-        headers = {"x-sinch-timestamp": current_time}
-        response = client.post(
-            "/webhook/sms", json={"invalid": "data"}, headers=headers
-        )
-        assert response.status_code == 422  # FastAPI validation error
+    def _auth_header(self, username: str, password: str) -> dict[str, str]:
+        import base64
 
-    @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
-    def test_webhook_invalid_signature(self, valid_webhook_payload):
-        current_time = str(int(time.time()))
-        headers = {
-            "x-sinch-signature": "invalid-signature",
-            "x-sinch-timestamp": current_time,
-        }
+        token = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
+
+    def test_webhook_missing_auth(self, valid_webhook_payload):
+        # No Authorization header
+        response = client.post("/webhook/sms", json=valid_webhook_payload)
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_webhook_invalid_auth(self, valid_webhook_payload):
+        # Wrong username/password
+        headers = self._auth_header("wronguser", "wrongpass")
         response = client.post(
             "/webhook/sms", json=valid_webhook_payload, headers=headers
         )
         assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid authentication credentials"
 
-    @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
+    @patch.dict(
+        os.environ,
+        {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
+    )
     @pytest.mark.integration
-    def test_webhook_valid_signature(
+    def test_webhook_valid_auth(
         self, valid_webhook_payload, mock_redis, mock_sinch_client
     ):
-        current_time = str(int(time.time()))
-        payload_str = json.dumps(valid_webhook_payload)
-        signature = create_signature(payload_str, "test-secret")
-        headers = {"x-sinch-signature": signature, "x-sinch-timestamp": current_time}
+        # Reload the module to pick up new env vars
+        import importlib
+
+        import src.sms_handler
+
+        importlib.reload(src.sms_handler)
+
+        headers = self._auth_header("testuser", "testpass")
         mock_redis.incr.return_value = 1
         mock_redis.expire = AsyncMock()
-        response = client.post("/webhook/sms", content=payload_str, headers=headers)
-        assert response.status_code == 200
-        assert response.json()["message"] == "Inbound message received"
-
-    @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", None)
-    def test_webhook_no_secret_configured(self, valid_webhook_payload):
-        current_time = str(int(time.time()))
-        headers = {
-            "x-sinch-signature": "some-signature",
-            "x-sinch-timestamp": current_time,
-        }
         response = client.post(
             "/webhook/sms", json=valid_webhook_payload, headers=headers
         )
-        assert response.status_code == 500
+        assert response.status_code == 200
+        assert response.json()["message"] == "Inbound message received"
 
-    @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
-    def test_webhook_invalid_payload(self):
-        current_time = str(int(time.time()))
-        invalid_payload = {"invalid": "data"}
-        payload_str = json.dumps(invalid_payload)
-        signature = create_signature(payload_str, "test-secret")
-        headers = {"x-sinch-signature": signature, "x-sinch-timestamp": current_time}
-        response = client.post("/webhook/sms", content=payload_str, headers=headers)
-        assert response.status_code == 400
+    def test_webhook_invalid_payload_with_auth(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SINCH_WEBHOOK_USERNAME": "testuser",
+                "SINCH_WEBHOOK_PASSWORD": "testpass",
+            },
+        ):
+            import importlib
+
+            import src.sms_handler
+
+            importlib.reload(src.sms_handler)
+
+            headers = self._auth_header("testuser", "testpass")
+            invalid_payload = {"invalid": "data"}
+            response = client.post(
+                "/webhook/sms", json=invalid_payload, headers=headers
+            )
+            assert response.status_code == 400
 
 
 class TestBackgroundTask:
