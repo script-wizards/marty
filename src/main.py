@@ -35,7 +35,7 @@ def validate_environment_variables() -> None:
     """Validate required environment variables on startup."""
     required_vars = [
         "ANTHROPIC_API_KEY",
-        "SECRET_KEY",
+        "HARDCOVER_API_TOKEN",
     ]
 
     missing_vars = []
