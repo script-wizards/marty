@@ -284,8 +284,8 @@ class SMSTest:
             logger.error(f"Failed to process webhook: {e}")
             print(f"{Fore.RED}❌ Failed to process webhook: {e}{Style.RESET_ALL}")
 
-    def _handle_command(self, command: str) -> bool:
-        """Handle special commands. Returns True if should exit."""
+    def _handle_command(self, command: str) -> bool | None:
+        """Handle special commands. Returns True if should exit, None if handled, False if not handled."""
         command_lower = command.lower()
 
         if command_lower in ["quit", "exit"]:
@@ -294,20 +294,20 @@ class SMSTest:
 
         if command_lower == "config":
             self._print_config()
-            return False
+            return None
 
         if command_lower == "help":
             self._print_help()
-            return False
+            return None
 
         if command_lower == "history":
             self._print_history()
-            return False
+            return None
 
         if command_lower == "clear":
             self.message_history = []
             print(f"\n{Fore.GREEN}🧹 Message history cleared!{Style.RESET_ALL}")
-            return False
+            return None
 
         return False
 
@@ -390,8 +390,11 @@ class SMSTest:
                         continue
 
                     # Handle commands
-                    if self._handle_command(user_input):
+                    command_result = self._handle_command(user_input)
+                    if command_result is True:  # Exit requested
                         break
+                    elif command_result is None:  # Command was handled, continue
+                        continue
 
                     # Handle specific actions
                     if user_input.lower() == "send":

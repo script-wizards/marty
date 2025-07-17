@@ -289,7 +289,7 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
                     ConversationMessage(
                         role="user" if msg.direction == "inbound" else "assistant",
                         content=msg.content,
-                        timestamp=msg.created_at,
+                        timestamp=msg.timestamp,
                     )
                 )
 
