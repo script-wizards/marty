@@ -1,11 +1,25 @@
 import logging
 import os
+from datetime import UTC, datetime
 
 import redis.asyncio as redis
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
 
+from src.ai_client import ConversationMessage, generate_ai_response
 from src.config import config
+from src.database import (
+    ConversationCreate,
+    CustomerCreate,
+    MessageCreate,
+    add_message,
+    create_conversation,
+    create_customer,
+    get_active_conversation,
+    get_conversation_messages,
+    get_customer_by_phone,
+    get_db,
+)
 from src.tools.external.sinch import (
     SinchSMSResponse,
     SinchSMSWebhookPayload,
@@ -42,13 +56,103 @@ async def rate_limit(phone: str, redis) -> None:
 
 
 async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
-    # Echo the message back for now
-    await sinch_client.send_sms(
-        body=f"Echo: {payload.message}",
-        to=[payload.from_info["endpoint"]],
-        from_=payload.to["endpoint"],
-    )
-    logger.info(f"Echoed SMS to {payload.from_info['endpoint']}")
+    """Process incoming SMS through Marty's AI system."""
+    phone = payload.from_info["endpoint"]
+    user_message = payload.message
+
+    logger.info(f"Processing SMS from {phone}: {user_message}")
+
+    try:
+        # Get database session
+        async for db in get_db():
+            # Get or create customer
+            customer = await get_customer_by_phone(db, phone)
+            if not customer:
+                customer_data = CustomerCreate(phone=phone)
+                customer = await create_customer(db, customer_data)
+                logger.info(f"Created new customer for {phone}")
+
+            # Get or create active conversation
+            conversation = await get_active_conversation(db, phone)
+            if not conversation:
+                conversation_data = ConversationCreate(
+                    customer_id=customer.id, phone=phone, status="active"
+                )
+                conversation = await create_conversation(db, conversation_data)
+                logger.info(f"Created new conversation for {phone}")
+
+            # Save the incoming message
+            incoming_message = MessageCreate(
+                conversation_id=conversation.id,
+                direction="inbound",
+                content=user_message,
+                status="received",
+            )
+            await add_message(db, incoming_message)
+
+            # Get recent conversation history
+            recent_messages = await get_conversation_messages(
+                db, conversation.id, limit=10
+            )
+
+            # Convert to ConversationMessage format (exclude the current message)
+            conversation_history = []
+            for msg in recent_messages[:-1]:  # Exclude the current message
+                conversation_history.append(
+                    ConversationMessage(
+                        role="user" if msg.direction == "inbound" else "assistant",
+                        content=msg.content,
+                        timestamp=msg.created_at,
+                    )
+                )
+
+            # Prepare customer context
+            customer_context = {
+                "customer_id": customer.id,
+                "phone": phone,
+                "name": customer.name,
+                "current_time": datetime.now(UTC).strftime("%I:%M %p"),
+                "current_date": datetime.now(UTC).strftime("%B %d, %Y"),
+                "current_day": datetime.now(UTC).strftime("%A"),
+            }
+
+            # Generate AI response
+            ai_response = await generate_ai_response(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                customer_context=customer_context,
+            )
+
+            # Save the AI response
+            response_message = MessageCreate(
+                conversation_id=conversation.id,
+                direction="outbound",
+                content=ai_response,
+                status="sent",
+            )
+            await add_message(db, response_message)
+
+            # Send SMS response
+            await sinch_client.send_sms(
+                body=ai_response,
+                to=[phone],
+                from_=payload.to["endpoint"],
+            )
+
+            logger.info(f"Sent AI response to {phone}")
+            break  # Exit the generator loop
+
+    except Exception as e:
+        logger.error(f"Error processing SMS from {phone}: {e}")
+        # Send error message to user
+        try:
+            await sinch_client.send_sms(
+                body="Sorry, I'm having trouble processing your message right now. Please try again later! 🤖",
+                to=[phone],
+                from_=payload.to["endpoint"],
+            )
+        except Exception as send_error:
+            logger.error(f"Failed to send error message: {send_error}")
 
 
 @router.post("/webhook/sms", response_model=SinchSMSResponse)

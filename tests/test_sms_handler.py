@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from src.sms_handler import process_incoming_sms, rate_limit, router
+from src.sms_handler import rate_limit, router
 from src.tools.external.sinch import SinchSMSWebhookPayload, verify_sinch_signature
 
 app = FastAPI()
@@ -148,20 +148,86 @@ class TestSMSWebhook:
 class TestBackgroundTask:
     @pytest.mark.asyncio
     async def test_process_incoming_sms(self, mock_sinch_client):
-        payload = SinchSMSWebhookPayload.model_validate(
-            {
-                "id": "test-id",
-                "type": "mo_text",
-                "from": {"type": "number", "endpoint": "+1234567890"},
-                "to": {"type": "number", "endpoint": "+0987654321"},
-                "message": "Hello, Marty!",
-                "received_at": "2024-07-17T00:00:00Z",
-            }
-        )
-        await process_incoming_sms(payload)
-        mock_sinch_client.send_sms.assert_called_once_with(
-            body="Echo: Hello, Marty!", to=["+1234567890"], from_="+0987654321"
-        )
+        # Mock database and AI dependencies
+        with patch("src.sms_handler.get_db") as mock_get_db:
+            with patch("src.sms_handler.get_customer_by_phone") as mock_get_customer:
+                with patch("src.sms_handler.create_customer") as mock_create_customer:
+                    with patch(
+                        "src.sms_handler.get_active_conversation"
+                    ) as mock_get_conversation:
+                        with patch(
+                            "src.sms_handler.create_conversation"
+                        ) as mock_create_conversation:
+                            with patch(
+                                "src.sms_handler.add_message"
+                            ) as mock_add_message:
+                                with patch(
+                                    "src.sms_handler.get_conversation_messages"
+                                ) as mock_get_messages:
+                                    with patch(
+                                        "src.sms_handler.generate_ai_response"
+                                    ) as mock_ai_response:
+                                        mock_db = AsyncMock()
+
+                                        async def mock_get_db_gen():
+                                            yield mock_db
+
+                                        mock_get_db.return_value = mock_get_db_gen()
+
+                                        mock_customer = AsyncMock()
+                                        mock_customer.id = "customer-123"
+                                        mock_get_customer.return_value = None
+                                        mock_create_customer.return_value = (
+                                            mock_customer
+                                        )
+
+                                        mock_conversation = AsyncMock()
+                                        mock_conversation.id = "conversation-123"
+                                        mock_get_conversation.return_value = None
+                                        mock_create_conversation.return_value = (
+                                            mock_conversation
+                                        )
+
+                                        mock_get_messages.return_value = []
+                                        mock_ai_response.return_value = (
+                                            "Here's a great sci-fi book recommendation!"
+                                        )
+
+                                        payload = SinchSMSWebhookPayload.model_validate(
+                                            {
+                                                "id": "test-id",
+                                                "type": "mo_text",
+                                                "from": {
+                                                    "type": "number",
+                                                    "endpoint": "+1234567890",
+                                                },
+                                                "to": {
+                                                    "type": "number",
+                                                    "endpoint": "+0987654321",
+                                                },
+                                                "message": "Hello, Marty!",
+                                                "received_at": "2024-07-17T00:00:00Z",
+                                            }
+                                        )
+
+                                        # Import the function within the test to ensure proper patching
+                                        from src.sms_handler import process_incoming_sms
+
+                                        await process_incoming_sms(payload)
+
+                                        # Verify AI response was generated
+                                        mock_ai_response.assert_called_once()
+
+                                        # Verify database operations were called
+                                        mock_add_message.assert_called()  # Called twice: once for incoming, once for outgoing
+                                        assert mock_add_message.call_count == 2
+
+                                        # Verify SMS was sent with AI response
+                                        mock_sinch_client.send_sms.assert_called_once_with(
+                                            body="Here's a great sci-fi book recommendation!",
+                                            to=["+1234567890"],
+                                            from_="+0987654321",
+                                        )
 
 
 class TestPydanticModels:
@@ -228,10 +294,13 @@ class TestRedisIntegration:
                     with patch(
                         "src.sms_handler.sinch_client.send_sms", new_callable=AsyncMock
                     ):
+                        # Test real rate limiting with actual Redis
                         # First 5 requests should succeed
                         for _ in range(5):
                             response = client.post(
-                                "/webhook/sms", content=payload_str, headers=headers
+                                "/webhook/sms",
+                                content=payload_str,
+                                headers=headers,
                             )
                             assert response.status_code == 200
 
@@ -245,6 +314,7 @@ class TestRedisIntegration:
                         # Verify rate limit key exists and has correct value
                         rate_key = f"sms:rate:{phone}"
                         count = await test_redis.get(rate_key)
+                        assert count is not None
                         assert int(count) == 6
 
                         # Verify TTL is set

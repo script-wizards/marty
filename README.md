@@ -73,6 +73,10 @@ required environment variables:
 DATABASE_URL=postgresql+asyncpg://user:password@host:5432/dbname
 ANTHROPIC_API_KEY=your_claude_api_key_here
 HARDCOVER_API_TOKEN=Bearer your_hardcover_token_here
+SINCH_KEY_ID=your_sinch_key_id
+SINCH_KEY_SECRET=your_sinch_key_secret
+SINCH_PROJECT_ID=your_sinch_project_id
+SINCH_WEBHOOK_SECRET=your_webhook_secret
 ```
 
 ### Database Setup
@@ -177,6 +181,12 @@ response:
 just chat
 ```
 Terminal chat interface for testing AI responses without SMS pipeline.
+
+**SMS Testing** (⚠️ uses real API):
+```bash
+just sms
+```
+Interactive SMS testing interface for sending real SMS messages and testing webhook processing. Requires Sinch API credentials.
 
 **Integration Testing** (⚠️ costs money):
 ```bash
@@ -304,8 +314,9 @@ add token as HARDCOVER_API_TOKEN=Bearer your_token
 - ANTHROPIC_API_KEY: claude ai api key
 - HARDCOVER_API_TOKEN: book data api token
 - BOOKSHOP_AFFILIATE_ID: optional affiliate links
-- SINCH_API_TOKEN: sinch api authentication token
-- SINCH_SERVICE_PLAN_ID: sinch service plan identifier
+- SINCH_KEY_ID: sinch api key identifier
+- SINCH_KEY_SECRET: sinch api key secret
+- SINCH_PROJECT_ID: sinch project identifier
 - SINCH_WEBHOOK_SECRET: webhook signature verification
 - DEBUG: true/false
 - LOG_LEVEL: INFO/DEBUG

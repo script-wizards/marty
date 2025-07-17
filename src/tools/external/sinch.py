@@ -9,6 +9,30 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.config import config
 
 
+def normalize_phone_number(phone: str) -> str:
+    """
+    Normalize phone number to E-164 format without + sign for Sinch API.
+
+    Args:
+        phone: Phone number in various formats (+1234567890, 1234567890, etc.)
+
+    Returns:
+        Phone number in E-164 format without + sign (e.g., "11234567890")
+    """
+    # Remove any non-digit characters except +
+    cleaned = "".join(c for c in phone if c.isdigit() or c == "+")
+
+    # Remove leading + if present
+    if cleaned.startswith("+"):
+        cleaned = cleaned[1:]
+
+    # Remove leading 00 if present (international prefix)
+    if cleaned.startswith("00"):
+        cleaned = cleaned[2:]
+
+    return cleaned
+
+
 class SinchSMSWebhookPayload(BaseModel):
     """Sinch SMS webhook payload model."""
 
@@ -51,37 +75,45 @@ def verify_sinch_signature(request_body: bytes, signature: str, secret: str) -> 
 
 class SinchClient:
     """
-    Async Sinch SMS API client.
+    Async Sinch SMS API client using Bearer token authentication.
     """
 
     def __init__(
         self,
-        key_id: str,
-        key_secret: str,
-        project_id: str,
+        api_token: str,
+        service_plan_id: str,
         api_url: str = "https://us.sms.api.sinch.com",
     ) -> None:
-        self.key_id = key_id
-        self.key_secret = key_secret
-        self.project_id = project_id
+        self.api_token = api_token
+        self.service_plan_id = service_plan_id
         self.api_url = api_url.rstrip("/")
-        self._auth = (self.key_id, self.key_secret)
+        self._headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
 
     async def send_sms(
         self, *, body: str, to: list[str], from_: str, delivery_report: str = "none"
     ) -> dict[str, Any]:
-        url = f"{self.api_url}/xms/v1/{self.project_id}/batches"
+        """Send SMS using Sinch SMS API with Bearer token authentication."""
+        url = f"{self.api_url}/xms/v1/{self.service_plan_id}/batches"
+
+        # Normalize phone numbers to E-164 format without + sign
+        normalized_to = [normalize_phone_number(phone) for phone in to]
+        normalized_from = normalize_phone_number(from_)
+
         payload = {
             "body": body,
-            "to": to,
-            "from": from_,
+            "to": normalized_to,
+            "from": normalized_from,
             "delivery_report": delivery_report,
         }
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 url,
                 json=payload,
-                auth=self._auth,
+                headers=self._headers,
                 timeout=10.0,
             )
             resp.raise_for_status()
@@ -89,13 +121,13 @@ class SinchClient:
 
 
 # Singleton for app usage
-if not all([config.SINCH_KEY_ID, config.SINCH_KEY_SECRET, config.SINCH_PROJECT_ID]):
+if not all([config.SINCH_API_TOKEN, config.SINCH_SERVICE_PLAN_ID]):
     raise RuntimeError(
-        "Sinch configuration missing: SINCH_KEY_ID, SINCH_KEY_SECRET, and SINCH_PROJECT_ID must be set."
+        "Sinch configuration missing: SINCH_API_TOKEN and SINCH_SERVICE_PLAN_ID must be set."
     )
+
 sinch_client = SinchClient(
-    key_id=config.SINCH_KEY_ID,  # type: ignore[arg-type]
-    key_secret=config.SINCH_KEY_SECRET,  # type: ignore[arg-type]
-    project_id=config.SINCH_PROJECT_ID,  # type: ignore[arg-type]
+    api_token=config.SINCH_API_TOKEN,  # type: ignore[arg-type]
+    service_plan_id=config.SINCH_SERVICE_PLAN_ID,  # type: ignore[arg-type]
     api_url=config.SINCH_API_URL,
 )

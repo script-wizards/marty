@@ -95,6 +95,10 @@ db-revision message:
 chat:
     python scripts/chat.py
 
+# Test SMS functionality with real API calls (internal testing)
+sms:
+    python scripts/sms.py
+
 # Run comprehensive integration test (costs money)
 smoke-test:
     python scripts/smoke_test.py
@@ -161,6 +165,7 @@ help:
     @echo "  just dev          - Start development server"
     @echo "  just run          - Start production server"
     @echo "  just chat         - Interactive chat testing"
+    @echo "  just sms          - Test SMS functionality (⚠️ uses real API)"
     @echo ""
     @echo "Testing:"
     @echo "  just test         - Run all tests"
