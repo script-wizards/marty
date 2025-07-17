@@ -5,12 +5,17 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from src.sms_handler import rate_limit, router
-from src.tools.external.sinch import SinchSMSWebhookPayload, verify_sinch_signature
+from src.tools.external.sinch import (
+    SinchSMSWebhookPayload,
+    normalize_phone_number,
+    validate_phone_number,
+    verify_sinch_signature,
+)
 
 app = FastAPI()
 app.include_router(router)
@@ -27,9 +32,11 @@ def mock_redis():
 
 @pytest.fixture
 def mock_sinch_client():
-    with patch("src.sms_handler.sinch_client") as mock:
-        mock.send_sms = AsyncMock()
-        yield mock
+    with patch("src.sms_handler.get_sinch_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.send_sms = AsyncMock()
+        mock_get_client.return_value = mock_client
+        yield mock_client
 
 
 @pytest.fixture
@@ -37,8 +44,8 @@ def valid_webhook_payload():
     return {
         "id": "test-id",
         "type": "mo_text",
-        "from": {"type": "number", "endpoint": "+1234567890"},
-        "to": {"type": "number", "endpoint": "+0987654321"},
+        "from": {"type": "number", "endpoint": "+12125551234"},
+        "to": {"type": "number", "endpoint": "+19876543210"},
         "message": "Hello, Marty!",
         "received_at": "2024-07-17T00:00:00Z",
     }
@@ -52,6 +59,53 @@ def webhook_secret():
 def create_signature(payload: str, secret: str) -> str:
     mac = hmac.new(secret.encode(), msg=payload.encode(), digestmod=hashlib.sha256)
     return base64.b64encode(mac.digest()).decode()
+
+
+class TestPhoneNumberNormalization:
+    """Test phone number normalization and validation."""
+
+    def test_normalize_phone_number_us(self):
+        """Test US phone number normalization."""
+        # Test various US formats with valid area codes
+        assert normalize_phone_number("+1-212-555-1234") == "12125551234"
+        assert normalize_phone_number("(212) 555-1234") == "12125551234"
+        assert normalize_phone_number("212.555.1234") == "12125551234"
+        assert normalize_phone_number("2125551234") == "12125551234"
+        assert normalize_phone_number("1-212-555-1234") == "12125551234"
+
+    def test_normalize_phone_number_international(self):
+        """Test international phone number normalization."""
+        # UK number
+        assert normalize_phone_number("+44 20 7946 0958") == "442079460958"
+        # German number
+        assert normalize_phone_number("+49 30 12345678") == "493012345678"
+        # French number
+        assert normalize_phone_number("+33 1 42 86 20 00") == "33142862000"
+        # Japanese number
+        assert normalize_phone_number("+81 3-1234-5678") == "81312345678"
+
+    def test_normalize_phone_number_invalid(self):
+        """Test invalid phone number handling."""
+        with pytest.raises(ValueError, match="Invalid phone number"):
+            normalize_phone_number("123")
+
+        with pytest.raises(ValueError, match="Could not parse phone number"):
+            normalize_phone_number("not-a-number")
+
+        with pytest.raises(ValueError, match="Invalid phone number"):
+            normalize_phone_number("+1-555-123")  # Too short
+
+    def test_validate_phone_number(self):
+        """Test phone number validation."""
+        # Valid numbers
+        assert validate_phone_number("+1-212-555-1234") is True
+        assert validate_phone_number("+44 20 7946 0958") is True
+        assert validate_phone_number("(212) 555-1234") is True
+
+        # Invalid numbers
+        assert validate_phone_number("123") is False
+        assert validate_phone_number("not-a-number") is False
+        assert validate_phone_number("+1-555-123") is False  # Too short
 
 
 class TestSignatureVerification:
@@ -83,22 +137,24 @@ class TestRateLimiting:
     async def test_rate_limit_first_message(self, mock_redis):
         mock_redis.incr.return_value = 1
         mock_redis.expire = AsyncMock()
-        await rate_limit("+1234567890", mock_redis)
-        mock_redis.incr.assert_called_once_with("sms:rate:+1234567890")
-        mock_redis.expire.assert_called_once_with("sms:rate:+1234567890", 60)
+        await rate_limit("+12125551234", mock_redis)
+        mock_redis.incr.assert_called_once_with("sms:rate:+12125551234")
+        mock_redis.expire.assert_called_once_with("sms:rate:+12125551234", 60)
 
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded(self, mock_redis):
         mock_redis.incr.return_value = 6  # Exceeds limit of 5
-        with pytest.raises(Exception) as exc_info:
-            await rate_limit("+1234567890", mock_redis)
-        assert "Rate limit exceeded" in str(exc_info.value)
+        with pytest.raises(HTTPException) as exc_info:
+            await rate_limit("+12125551234", mock_redis)
+        exception: HTTPException = exc_info.value  # type: ignore
+        assert exception.status_code == 429
+        assert "Rate limit exceeded" in str(exception.detail)
 
     @pytest.mark.asyncio
     async def test_rate_limit_within_limit(self, mock_redis):
         mock_redis.incr.return_value = 3  # in limit
-        await rate_limit("+1234567890", mock_redis)
-        mock_redis.incr.assert_called_once_with("sms:rate:+1234567890")
+        await rate_limit("+12125551234", mock_redis)
+        mock_redis.incr.assert_called_once_with("sms:rate:+12125551234")
 
 
 class TestSMSWebhook:
@@ -149,7 +205,7 @@ class TestBackgroundTask:
     @pytest.mark.asyncio
     async def test_process_incoming_sms(self, mock_sinch_client):
         # Mock database and AI dependencies
-        with patch("src.sms_handler.get_db") as mock_get_db:
+        with patch("src.sms_handler.get_db_session") as mock_get_db_session:
             with patch("src.sms_handler.get_customer_by_phone") as mock_get_customer:
                 with patch("src.sms_handler.create_customer") as mock_create_customer:
                     with patch(
@@ -169,10 +225,13 @@ class TestBackgroundTask:
                                     ) as mock_ai_response:
                                         mock_db = AsyncMock()
 
-                                        async def mock_get_db_gen():
-                                            yield mock_db
-
-                                        mock_get_db.return_value = mock_get_db_gen()
+                                        # Mock the async context manager
+                                        mock_get_db_session.return_value.__aenter__ = (
+                                            AsyncMock(return_value=mock_db)
+                                        )
+                                        mock_get_db_session.return_value.__aexit__ = (
+                                            AsyncMock(return_value=None)
+                                        )
 
                                         mock_customer = AsyncMock()
                                         mock_customer.id = "customer-123"
@@ -199,11 +258,11 @@ class TestBackgroundTask:
                                                 "type": "mo_text",
                                                 "from": {
                                                     "type": "number",
-                                                    "endpoint": "+1234567890",
+                                                    "endpoint": "+12125551234",
                                                 },
                                                 "to": {
                                                     "type": "number",
-                                                    "endpoint": "+0987654321",
+                                                    "endpoint": "+19876543210",
                                                 },
                                                 "message": "Hello, Marty!",
                                                 "received_at": "2024-07-17T00:00:00Z",
@@ -225,8 +284,8 @@ class TestBackgroundTask:
                                         # Verify SMS was sent with AI response
                                         mock_sinch_client.send_sms.assert_called_once_with(
                                             body="Here's a great sci-fi book recommendation!",
-                                            to=["+1234567890"],
-                                            from_="+0987654321",
+                                            to=["+12125551234"],
+                                            from_="+19876543210",
                                         )
 
 
@@ -276,7 +335,7 @@ class TestRedisIntegration:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_rate_limit_with_real_redis(self, test_redis):
-        phone = "+15551234567"
+        phone = "+12125551234"
         payload = {
             "id": "test-id",
             "type": "mo_text",
@@ -292,7 +351,7 @@ class TestRedisIntegration:
             with patch("src.sms_handler.verify_sinch_signature", return_value=True):
                 with patch("src.sms_handler.get_redis", return_value=test_redis):
                     with patch(
-                        "src.sms_handler.sinch_client.send_sms", new_callable=AsyncMock
+                        "src.sms_handler.get_sinch_client", return_value=AsyncMock()
                     ):
                         # Test real rate limiting with actual Redis
                         # First 5 requests should succeed

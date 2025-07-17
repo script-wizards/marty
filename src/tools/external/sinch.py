@@ -4,6 +4,7 @@ import hmac
 from typing import Any
 
 import httpx
+import phonenumbers
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.config import config
@@ -14,23 +15,47 @@ def normalize_phone_number(phone: str) -> str:
     Normalize phone number to E-164 format without + sign for Sinch API.
 
     Args:
-        phone: Phone number in various formats (+1234567890, 1234567890, etc.)
+        phone: Phone number in various formats
 
     Returns:
-        Phone number in E-164 format without + sign (e.g., "11234567890")
+        Phone number in E-164 format without + sign
+
+    Raises:
+        ValueError: If the phone number cannot be parsed or is invalid
     """
-    # Remove any non-digit characters except +
-    cleaned = "".join(c for c in phone if c.isdigit() or c == "+")
+    try:
+        # Try parsing with US as default region for numbers without country code
+        parsed_number = phonenumbers.parse(phone, "US")
 
-    # Remove leading + if present
-    if cleaned.startswith("+"):
-        cleaned = cleaned[1:]
+        if not phonenumbers.is_valid_number(parsed_number):
+            raise ValueError(f"Invalid phone number: {phone}")
 
-    # Remove leading 00 if present (international prefix)
-    if cleaned.startswith("00"):
-        cleaned = cleaned[2:]
+        e164_format = phonenumbers.format_number(
+            parsed_number, phonenumbers.PhoneNumberFormat.E164
+        )
+        return e164_format[1:]  # Remove leading +
 
-    return cleaned
+    except phonenumbers.NumberParseException as e:
+        raise ValueError(f"Could not parse phone number '{phone}': {e}") from e
+    except Exception as e:
+        raise ValueError(f"Error normalizing phone number '{phone}': {e}") from e
+
+
+def validate_phone_number(phone: str) -> bool:
+    """
+    Validate if a phone number is in a valid format.
+
+    Args:
+        phone: Phone number to validate
+
+    Returns:
+        True if the phone number is valid, False otherwise
+    """
+    try:
+        parsed_number = phonenumbers.parse(phone, "US")
+        return phonenumbers.is_valid_number(parsed_number)
+    except phonenumbers.NumberParseException:
+        return False
 
 
 class SinchSMSWebhookPayload(BaseModel):
@@ -98,9 +123,11 @@ class SinchClient:
         """Send SMS using Sinch SMS API with Bearer token authentication."""
         url = f"{self.api_url}/xms/v1/{self.service_plan_id}/batches"
 
-        # Normalize phone numbers to E-164 format without + sign
-        normalized_to = [normalize_phone_number(phone) for phone in to]
-        normalized_from = normalize_phone_number(from_)
+        try:
+            normalized_to = [normalize_phone_number(phone) for phone in to]
+            normalized_from = normalize_phone_number(from_)
+        except ValueError as e:
+            raise ValueError(f"Phone number validation failed: {e}") from e
 
         payload = {
             "body": body,
@@ -120,14 +147,27 @@ class SinchClient:
             return resp.json()
 
 
-# Singleton for app usage
-if not all([config.SINCH_API_TOKEN, config.SINCH_SERVICE_PLAN_ID]):
-    raise RuntimeError(
-        "Sinch configuration missing: SINCH_API_TOKEN and SINCH_SERVICE_PLAN_ID must be set."
-    )
+# Singleton for app usage with lazy initialization
+_sinch_client: SinchClient | None = None
 
-sinch_client = SinchClient(
-    api_token=config.SINCH_API_TOKEN,  # type: ignore[arg-type]
-    service_plan_id=config.SINCH_SERVICE_PLAN_ID,  # type: ignore[arg-type]
-    api_url=config.SINCH_API_URL,
-)
+
+def get_sinch_client() -> SinchClient:
+    """
+    Lazily initialize and return the SinchClient singleton.
+    Raises RuntimeError if required configuration is missing.
+    """
+    global _sinch_client
+
+    if _sinch_client is None:
+        if not all([config.SINCH_API_TOKEN, config.SINCH_SERVICE_PLAN_ID]):
+            raise RuntimeError(
+                "Sinch configuration missing: SINCH_API_TOKEN and SINCH_SERVICE_PLAN_ID must be set."
+            )
+
+        _sinch_client = SinchClient(
+            api_token=config.SINCH_API_TOKEN,  # type: ignore[arg-type]
+            service_plan_id=config.SINCH_SERVICE_PLAN_ID,  # type: ignore[arg-type]
+            api_url=config.SINCH_API_URL,
+        )
+
+    return _sinch_client  # type: ignore[return-value]

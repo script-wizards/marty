@@ -18,12 +18,12 @@ from src.database import (
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
-    get_db,
+    get_db_session,
 )
 from src.tools.external.sinch import (
     SinchSMSResponse,
     SinchSMSWebhookPayload,
-    sinch_client,
+    get_sinch_client,
     verify_sinch_signature,
 )
 
@@ -155,7 +155,7 @@ async def send_multiple_sms(
             )
             safe_message = gsm7_safe(message)
         try:
-            await sinch_client.send_sms(
+            await get_sinch_client().send_sms(
                 body=safe_message,
                 to=[to_phone],
                 from_=from_number,
@@ -177,13 +177,6 @@ async def get_redis():
     return redis.from_url(REDIS_URL, decode_responses=True)
 
 
-def get_signature_header(request: Request) -> str:
-    sig = request.headers.get("x-sinch-signature")
-    if not sig:
-        raise HTTPException(status_code=400, detail="Missing Sinch signature header")
-    return sig
-
-
 async def rate_limit(phone: str, redis) -> None:
     key = f"sms:rate:{phone}"
     count = await redis.incr(key)
@@ -201,8 +194,8 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
     logger.info(f"Processing SMS from {phone}: {user_message}")
 
     try:
-        # Get database session
-        async for db in get_db():
+        # Get database session using proper async context manager
+        async with get_db_session() as db:
             # Get or create customer
             customer = await get_customer_by_phone(db, phone)
             if not customer:
@@ -281,13 +274,12 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             await send_multiple_sms(messages_to_send, phone, payload.to["endpoint"])
 
             logger.info(f"Sent {len(messages_to_send)} SMS messages to {phone}")
-            break  # Exit the generator loop
 
     except Exception as e:
         logger.error(f"Error processing SMS from {phone}: {e}")
         # Send error message to user
         try:
-            await sinch_client.send_sms(
+            await get_sinch_client().send_sms(
                 body="Sorry, I'm having trouble processing your message right now. Please try again later! 🤖",
                 to=[phone],
                 from_=payload.to["endpoint"],

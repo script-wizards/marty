@@ -18,7 +18,6 @@ from typing import Any
 import redis.asyncio as redis
 import structlog
 
-import src.database as database
 from src.database import (
     ConversationCreate,
     CustomerCreate,
@@ -29,6 +28,7 @@ from src.database import (
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
+    get_db_session,
 )
 from src.tools.base import BaseTool, ToolResult
 
@@ -236,23 +236,6 @@ class ConversationManagerTool(BaseTool):
             logger.error(f"Redis operation failed: {e}")
             raise
 
-    @asynccontextmanager
-    async def _get_db_session(self):
-        """Get a database session as context manager."""
-        database.init_database()  # Ensure database is initialized
-        if database.AsyncSessionLocal is None:
-            logger.error("Database not initialized: AsyncSessionLocal is None")
-            raise RuntimeError("Database not initialized")
-
-        async with database.AsyncSessionLocal() as session:
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
-
     async def _load_conversation(self, phone: str) -> ConversationContext | None:
         """Load conversation from Redis cache or database."""
         cache_key = f"conversation:{phone}"
@@ -276,7 +259,7 @@ class ConversationManagerTool(BaseTool):
     async def _load_from_database(self, phone: str) -> ConversationContext | None:
         """Load conversation from database."""
         try:
-            async with self._get_db_session() as session:
+            async with get_db_session() as session:
                 # Get customer
                 customer = await get_customer_by_phone(session, phone)
                 if not customer:
@@ -367,7 +350,7 @@ class ConversationManagerTool(BaseTool):
 
     async def _create_new_conversation(self, phone: str) -> ConversationContext:
         """Create a new conversation context."""
-        async with self._get_db_session() as session:
+        async with get_db_session() as session:
             # Get or create customer
             customer = await get_customer_by_phone(session, phone)
             if not customer:
@@ -395,7 +378,7 @@ class ConversationManagerTool(BaseTool):
         self, context: ConversationContext, message: ConversationMessage
     ) -> None:
         """Save message to database."""
-        async with self._get_db_session() as session:
+        async with get_db_session() as session:
             await add_message(
                 session,
                 MessageCreate(

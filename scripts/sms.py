@@ -185,9 +185,9 @@ class SMSTest:
     async def _initialize_sinch_client(self) -> None:
         """Initialize the Sinch client."""
         try:
-            from src.tools.external.sinch import sinch_client
+            from src.tools.external.sinch import get_sinch_client
 
-            self.sinch_client = sinch_client
+            self.sinch_client = get_sinch_client()
             print(f"{Fore.GREEN}✅ Sinch client initialized{Style.RESET_ALL}")
         except Exception as e:
             raise SMSTestError(f"Failed to initialize Sinch client: {e}") from e

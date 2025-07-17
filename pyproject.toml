@@ -24,6 +24,7 @@ dependencies = [
     "redis>=6.2.0",
     "structlog>=25.4.0",
     "sinch>=1.1.2",
+    "phonenumbers>=9.0.9",
 ]
 
 [project.optional-dependencies]
