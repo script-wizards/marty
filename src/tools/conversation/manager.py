@@ -18,8 +18,8 @@ from typing import Any
 
 import redis.asyncio as redis
 
-import database
-from database import (
+import src.database as database
+from src.database import (
     ConversationCreate,
     CustomerCreate,
     MessageCreate,
@@ -30,7 +30,7 @@ from database import (
     get_conversation_messages,
     get_customer_by_phone,
 )
-from tools.base import BaseTool, ToolResult
+from src.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -218,9 +218,9 @@ class ConversationManagerTool(BaseTool):
                     self.redis_url, decode_responses=True
                 )
                 await self.redis_client.ping()
-                self.logger.info("Redis connection established successfully")
+                logger.info("Redis connection established successfully")
             except Exception as e:
-                self.logger.error(f"Failed to connect to Redis: {e}")
+                logger.error(f"Failed to connect to Redis: {e}")
                 raise
 
     @asynccontextmanager
@@ -233,14 +233,16 @@ class ConversationManagerTool(BaseTool):
         try:
             yield self.redis_client
         except Exception as e:
-            self.logger.error(f"Redis operation failed: {e}")
+            logger.error(f"Redis operation failed: {e}")
             raise
 
     @asynccontextmanager
     async def _get_db_session(self):
         """Get a database session as context manager."""
         database.init_database()  # Ensure database is initialized
-        assert database.AsyncSessionLocal is not None, "Database not initialized"
+        if database.AsyncSessionLocal is None:
+            logger.error("Database not initialized: AsyncSessionLocal is None")
+            raise RuntimeError("Database not initialized")
 
         async with database.AsyncSessionLocal() as session:
             try:
@@ -260,15 +262,15 @@ class ConversationManagerTool(BaseTool):
                 # Try Redis cache first
                 cached_data = await redis_client.get(cache_key)
                 if cached_data:
-                    self.logger.info(f"Loading conversation from cache for {phone}")
+                    logger.info(f"Loading conversation from cache for {phone}")
                     return self._deserialize_conversation(json.loads(cached_data))
 
                 # Fall back to database
-                self.logger.info(f"Loading conversation from database for {phone}")
+                logger.info(f"Loading conversation from database for {phone}")
                 return await self._load_from_database(phone)
 
         except Exception as e:
-            self.logger.error(f"Failed to load conversation for {phone}: {e}")
+            logger.error(f"Failed to load conversation for {phone}: {e}")
             return None
 
     async def _load_from_database(self, phone: str) -> ConversationContext | None:
@@ -318,9 +320,7 @@ class ConversationManagerTool(BaseTool):
                 return context
 
         except Exception as e:
-            self.logger.error(
-                f"Failed to load conversation from database for {phone}: {e}"
-            )
+            logger.error(f"Failed to load conversation from database for {phone}: {e}")
             return None
 
     async def _add_message(
@@ -362,7 +362,7 @@ class ConversationManagerTool(BaseTool):
         # Cache updated context
         await self._cache_conversation(context)
 
-        self.logger.info(f"Added message to conversation for {phone}")
+        logger.info(f"Added message to conversation for {phone}")
         return context
 
     async def _create_new_conversation(self, phone: str) -> ConversationContext:
@@ -388,7 +388,7 @@ class ConversationManagerTool(BaseTool):
                 last_activity=datetime.now(UTC),
             )
 
-            self.logger.info(f"Created new conversation for {phone}")
+            logger.info(f"Created new conversation for {phone}")
             return context
 
     async def _save_message_to_database(
@@ -417,7 +417,7 @@ class ConversationManagerTool(BaseTool):
                 )
 
         except Exception as e:
-            self.logger.error(f"Failed to cache conversation: {e}")
+            logger.error(f"Failed to cache conversation: {e}")
             # Don't raise - caching failure shouldn't break the flow
 
     def _serialize_conversation(self, context: ConversationContext) -> dict[str, Any]:
@@ -468,9 +468,9 @@ class ConversationManagerTool(BaseTool):
         try:
             async with self._get_redis() as redis_client:
                 await redis_client.delete(cache_key)
-            self.logger.info(f"Expired conversation for {phone}")
+            logger.info(f"Expired conversation for {phone}")
         except Exception as e:
-            self.logger.error(f"Failed to expire conversation for {phone}: {e}")
+            logger.error(f"Failed to expire conversation for {phone}: {e}")
             raise
 
     async def _get_conversation_summary(self, phone: str) -> dict[str, Any]:
@@ -490,4 +490,4 @@ class ConversationManagerTool(BaseTool):
         """Close Redis connection."""
         if self.redis_client:
             await self.redis_client.aclose()
-            self.logger.info("Redis connection closed")
+            logger.info("Redis connection closed")

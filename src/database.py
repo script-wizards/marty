@@ -496,7 +496,9 @@ class InventoryResponse(BaseModel):
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
     init_database()  # Ensure database is initialized
-    assert AsyncSessionLocal is not None, "Database not initialized"
+    if AsyncSessionLocal is None:
+        logger.error("Database not initialized: AsyncSessionLocal is None")
+        raise RuntimeError("Database not initialized")
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -510,7 +512,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db():
     """Initialize database tables."""
     init_database()  # Ensure database is initialized
-    assert engine is not None, "Database engine not initialized"
+    if engine is None:
+        logger.error("Database engine not initialized: engine is None")
+        raise RuntimeError("Database engine not initialized")
 
     # Test connection first
     try:
@@ -526,7 +530,9 @@ async def test_db_connection():
     """Test database connection and return status."""
     try:
         init_database()
-        assert engine is not None, "Database engine not initialized"
+        if engine is None:
+            logger.error("Database engine not initialized: engine is None")
+            raise RuntimeError("Database engine not initialized")
 
         async with engine.begin() as conn:
             result = await conn.execute(func.now())

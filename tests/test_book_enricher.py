@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tools.book.enricher import BookEnricherTool, BookMention, EnrichedResponse
+from src.tools.book.enricher import BookEnricherTool, BookMention, EnrichedResponse
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ class TestBookEnricherTool:
         assert "Missing required parameters" in result.error
 
     @pytest.mark.asyncio
-    @patch("ai_client.generate_ai_response")
+    @patch("src.ai_client.generate_ai_response")
     async def test_extract_book_mentions_with_ai(self, mock_ai_response, enricher):
         """Test book mention extraction from AI response."""
         # Mock AI response
@@ -88,7 +88,7 @@ class TestBookEnricherTool:
         assert mentions[0].confidence == 0.9
 
     @pytest.mark.asyncio
-    @patch("ai_client.generate_ai_response")
+    @patch("src.ai_client.generate_ai_response")
     async def test_isbn_extraction(self, mock_ai_response, enricher):
         """Test ISBN extraction from text."""
         # Mock AI response to avoid interference
@@ -138,8 +138,8 @@ class TestBookEnricherTool:
         assert validated_book is None
 
     @pytest.mark.asyncio
-    @patch("ai_client.generate_ai_response")
-    @patch("database.AsyncSessionLocal")
+    @patch("src.ai_client.generate_ai_response")
+    @patch("src.database.AsyncSessionLocal")
     async def test_execute_full_flow(
         self, mock_session_local, mock_ai_response, enricher
     ):

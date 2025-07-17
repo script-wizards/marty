@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import database
-from database import (
+import src.database as database
+from src.database import (
     Book,
     BookCreate,
 )
-from tools.base import BaseTool, ToolResult
-from tools.external.hardcover import HardcoverAPIError, HardcoverTool
+from src.tools.base import BaseTool, ToolResult
+from src.tools.external.hardcover import HardcoverAPIError, HardcoverTool
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class BookEnricherTool(BaseTool):
         Returns:
             EnrichedResponse with validated book data
         """
-        self.logger.info(f"Enriching response for conversation {conversation_id}")
+        logger.info(f"Enriching response for conversation {conversation_id}")
 
         # Extract book mentions from AI response
         book_mentions = await self._extract_book_mentions(ai_response, message_id)
@@ -168,7 +168,7 @@ class BookEnricherTool(BaseTool):
                     await self._store_book(validated_book)
 
             except Exception as e:
-                self.logger.warning(f"Failed to validate book '{mention.title}': {e}")
+                logger.warning(f"Failed to validate book '{mention.title}': {e}")
                 # Keep unvalidated mention for context
 
         return EnrichedResponse(
@@ -205,7 +205,7 @@ class BookEnricherTool(BaseTool):
 
         # Use AI for natural language book extraction
         try:
-            from ai_client import generate_ai_response
+            from src.ai_client import generate_ai_response
 
             prompt = f"""Extract book titles and authors from this AI response about books.
 Return ONLY a JSON array of objects with this structure:
@@ -245,11 +245,11 @@ Guidelines:
                 return mentions
 
             except json.JSONDecodeError:
-                self.logger.warning(f"Failed to parse AI response as JSON: {response}")
+                logger.warning(f"Failed to parse AI response as JSON: {response}")
                 return mentions  # Return the ISBN mentions we found
 
         except Exception as e:
-            self.logger.error(f"AI book extraction failed: {e}")
+            logger.error(f"AI book extraction failed: {e}")
             raise
 
     async def _validate_book(self, mention: BookMention) -> dict[str, Any] | None:
@@ -266,25 +266,25 @@ Guidelines:
             )
 
             if not result.success:
-                self.logger.error(f"Failed to search books: {result.error}")
+                logger.error(f"Failed to search books: {result.error}")
                 return None
 
             books = result.data
 
             if not books:
-                self.logger.debug(f"No books found for: {search_query}")
+                logger.debug(f"No books found for: {search_query}")
                 return None
 
             # Find the best match
             best_match = self._find_best_match(mention, books)
             if best_match:
-                self.logger.info(f"Validated book: {best_match.get('title')}")
+                logger.info(f"Validated book: {best_match.get('title')}")
                 return best_match
 
             return None
 
         except HardcoverAPIError as e:
-            self.logger.error(f"Hardcover API error for '{mention.title}': {e}")
+            logger.error(f"Hardcover API error for '{mention.title}': {e}")
             return None
 
     def _find_best_match(
@@ -322,7 +322,9 @@ Guidelines:
         """Store validated book in database."""
         try:
             database.init_database()
-            assert database.AsyncSessionLocal is not None
+            if database.AsyncSessionLocal is None:
+                logger.error("Database not initialized: AsyncSessionLocal is None")
+                raise RuntimeError("Database not initialized")
 
             async with database.AsyncSessionLocal() as session:
                 # Check if book already exists
@@ -335,7 +337,7 @@ Guidelines:
                 existing_book = result.scalars().first()
 
                 if existing_book:
-                    self.logger.debug(f"Book already exists: {existing_book.title}")
+                    logger.debug(f"Book already exists: {existing_book.title}")
                     return
 
                 # Create new book
@@ -358,10 +360,10 @@ Guidelines:
                 session.add(db_book)
                 await session.commit()
 
-                self.logger.info(f"Stored book: {db_book.title}")
+                logger.info(f"Stored book: {db_book.title}")
 
         except Exception as e:
-            self.logger.error(f"Failed to store book: {e}")
+            logger.error(f"Failed to store book: {e}")
             raise
 
     async def close(self) -> None:

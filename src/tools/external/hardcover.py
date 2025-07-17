@@ -15,8 +15,8 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
 
-from config import config
-from tools.base import BaseTool, ToolResult
+from src.config import config
+from src.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +310,7 @@ class HardcoverTool(BaseTool):
             try:
                 client = await self._get_client()
                 async with client as session:
-                    self.logger.debug(
+                    logger.debug(
                         f"Executing query (attempt {attempt + 1}/{self._retry_count})"
                     )
                     result = await session.execute(query, variable_values=variables)
@@ -318,7 +318,7 @@ class HardcoverTool(BaseTool):
 
             except TransportQueryError as e:
                 # GraphQL errors (like field not found)
-                self.logger.error(f"GraphQL query error: {e}")
+                logger.error(f"GraphQL query error: {e}")
                 raise HardcoverAPIError(f"GraphQL query error: {e}") from e
 
             except TransportError as e:
@@ -330,7 +330,7 @@ class HardcoverTool(BaseTool):
                     wait_time = (
                         self._retry_delay * (attempt + 1) * 10
                     )  # Progressive backoff for rate limits
-                    self.logger.warning(f"Rate limit hit, waiting {wait_time} seconds")
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds")
                     await asyncio.sleep(wait_time)
                     last_error = HardcoverRateLimitError(f"Rate limit exceeded: {e}")
                 elif "timeout" in str(e).lower():
@@ -341,13 +341,11 @@ class HardcoverTool(BaseTool):
                     last_error = e
                     if attempt < self._retry_count - 1:
                         delay = self._retry_delay * (2**attempt)  # Exponential backoff
-                        self.logger.warning(
-                            f"Request failed, retrying in {delay}s: {e}"
-                        )
+                        logger.warning(f"Request failed, retrying in {delay}s: {e}")
                         await asyncio.sleep(delay)
 
             except Exception as e:
-                self.logger.error(f"Unexpected error: {e}")
+                logger.error(f"Unexpected error: {e}")
                 last_error = e
                 if attempt < self._retry_count - 1:
                     delay = self._retry_delay * (2**attempt)
@@ -383,7 +381,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        self.logger.info(f"Searching books: query={query}, limit={limit}")
+        logger.info(f"Searching books: query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         search_result = result.get("search", {})
 
@@ -419,7 +417,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        self.logger.info(f"Searching books (raw): query={query}, limit={limit}")
+        logger.info(f"Searching books (raw): query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         return result.get("search", {})
 
@@ -458,7 +456,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"id": book_id}
 
-        self.logger.info(f"Getting book details: id={book_id}")
+        logger.info(f"Getting book details: id={book_id}")
         result = await self._execute_with_retry(query, variables)
         return result.get("books_by_pk")
 
@@ -497,7 +495,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"ids": book_ids}
 
-        self.logger.info(
+        logger.info(
             f"Getting books by IDs: ids={book_ids[:5]}{'...' if len(book_ids) > 5 else ''}"
         )
         result = await self._execute_with_retry(query, variables)
@@ -528,7 +526,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"limit": limit}
 
-        self.logger.info(f"Getting user recommendations: limit={limit}")
+        logger.info(f"Getting user recommendations: limit={limit}")
         result = await self._execute_with_retry(query, variables)
         return result.get("recommendations", [])
 
@@ -559,7 +557,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"from": from_date, "to": to_date, "limit": limit, "offset": offset}
 
-        self.logger.info(
+        logger.info(
             f"Getting trending books: from={from_date}, to={to_date}, limit={limit}"
         )
         result = await self._execute_with_retry(query, variables)
@@ -579,7 +577,7 @@ class HardcoverTool(BaseTool):
         """
         )
 
-        self.logger.info("Getting current user information")
+        logger.info("Getting current user information")
         return await self._execute_with_retry(query)
 
     async def _introspect_schema(self) -> dict[str, Any]:
@@ -672,7 +670,7 @@ class HardcoverTool(BaseTool):
         """
         )
 
-        self.logger.info("Introspecting GraphQL schema")
+        logger.info("Introspecting GraphQL schema")
         return await self._execute_with_retry(introspection_query)
 
     async def close(self) -> None:

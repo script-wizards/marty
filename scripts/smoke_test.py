@@ -66,8 +66,17 @@ class SmokeTestRunner:
 
     async def test_claude_integration(self) -> bool:
         """Test Claude AI integration."""
+        # Only run real API tests if explicitly enabled
+        if not os.getenv("MARTY_ENABLE_REAL_API_TESTS"):
+            self._log_test(
+                "Claude AI",
+                True,
+                "Skipped (use MARTY_ENABLE_REAL_API_TESTS=1 to test real API)",
+            )
+            return True
+
         try:
-            from ai_client import ConversationMessage, generate_ai_response
+            from src.ai_client import ConversationMessage, generate_ai_response
 
             # Test basic response
             response = await generate_ai_response("Hello", [])
@@ -95,7 +104,7 @@ class SmokeTestRunner:
     async def test_hardcover_integration(self) -> bool:
         """Test Hardcover API integration."""
         try:
-            from tools.external.hardcover import HardcoverTool
+            from src.tools.external.hardcover import HardcoverTool
 
             tool = HardcoverTool()
 
@@ -130,7 +139,7 @@ class SmokeTestRunner:
         try:
             from sqlalchemy import text
 
-            from database import AsyncSession, engine
+            from src.database import AsyncSession, engine
 
             async with AsyncSession(engine) as session:
                 # Test basic connection
@@ -150,8 +159,8 @@ class SmokeTestRunner:
     async def test_complete_flow(self) -> bool:
         """Test a complete conversation flow."""
         try:
-            from ai_client import generate_ai_response
-            from database import (
+            from src.ai_client import generate_ai_response
+            from src.database import (
                 AsyncSession,
                 ConversationCreate,
                 CustomerCreate,

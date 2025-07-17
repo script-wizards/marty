@@ -32,10 +32,11 @@ dev = [
     "ruff>=0.1.0",
     "pre-commit>=3.5.0",
     "ty>=0.0.1a14",
+    "bandit>=1.7.7",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["src"]
 exclude = [
     "tests",
     ".git",
@@ -79,6 +80,10 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "integration: marks tests as integration (deselect with '-m \"not integration\"')",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -97,3 +102,21 @@ dev = [
     "colorama>=0.4.6",
     "ty>=0.0.1a14",
 ]
+
+[tool.bandit]
+exclude_dirs = [
+    ".venv",
+    "venv",
+    "env",
+    "__pypackages__",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    ".eggs",
+    "dist",
+    "build",
+    "tests",
+    "alembic",
+]
+skips = ["B101", "B008"]

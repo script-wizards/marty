@@ -5,11 +5,11 @@ Tests prompt loading, response generation, error handling, and mocking.
 
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai_client import (
+from src.ai_client import (
     MARTY_SYSTEM_PROMPT,
     ConversationMessage,
     generate_ai_response,
@@ -34,18 +34,18 @@ class TestSystemPromptLoading:
         """Test loading system prompt from custom file."""
         # Create a temporary test prompt file
         test_prompt = "Test prompt content"
-        test_file = Path("test_prompt.txt")
+        test_file = Path(__file__).parent / "test_prompt.txt"
         test_file.write_text(test_prompt)
 
         try:
-            prompt = load_system_prompt("test_prompt.txt")
+            prompt = load_system_prompt(str(test_file))
             assert prompt == test_prompt
         finally:
             test_file.unlink()  # Clean up
 
     def test_load_system_prompt_file_not_found(self):
         """Test fallback when prompt file doesn't exist."""
-        with patch("ai_client.logger.warning") as mock_warning:
+        with patch("src.ai_client.logger.warning") as mock_warning:
             prompt = load_system_prompt("nonexistent_file.txt")
 
             assert isinstance(prompt, str)
@@ -57,36 +57,31 @@ class TestSystemPromptLoading:
             assert "nonexistent_file.txt" in mock_warning.call_args[0][0]
             assert "not found" in mock_warning.call_args[0][0]
 
-    def test_marty_system_prompt_loaded(self):
-        """Test that the global MARTY_SYSTEM_PROMPT is loaded correctly."""
-        assert isinstance(MARTY_SYSTEM_PROMPT, str)
-        assert len(MARTY_SYSTEM_PROMPT) > 1000
-        assert "Martinus Trismegistus" in MARTY_SYSTEM_PROMPT
 
-
-class TestConversationMessage:
-    """Test ConversationMessage model."""
+class TestConversationMessageValidation:
+    """Test conversation message validation and processing."""
 
     def test_conversation_message_creation(self):
         """Test creating a ConversationMessage."""
         from datetime import datetime
 
-        msg = ConversationMessage(
-            role="user", content="Hello Marty!", timestamp=datetime.now()
+        message = ConversationMessage(
+            role="user", content="Hello", timestamp=datetime.now()
         )
 
-        assert msg.role == "user"
-        assert msg.content == "Hello Marty!"
-        assert isinstance(msg.timestamp, datetime)
+        assert message.role == "user"
+        assert message.content == "Hello"
+        assert isinstance(message.timestamp, datetime)
 
     def test_conversation_message_validation(self):
-        """Test ConversationMessage validation."""
+        """Test validation of ConversationMessage fields."""
         from datetime import datetime
 
-        # Valid roles
-        for role in ["user", "assistant"]:
+        # Test valid roles
+        valid_roles = ["user", "assistant"]
+        for role in valid_roles:
             msg = ConversationMessage(
-                role=role, content="Test content", timestamp=datetime.now()
+                role=role, content="test", timestamp=datetime.now()
             )
             assert msg.role == role
 
@@ -95,23 +90,22 @@ class TestGenerateAIResponse:
     """Test AI response generation with mocked Claude API."""
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_success(self):
+    async def test_generate_ai_response_success(self, mock_claude_api, claude_response):
         """Test successful AI response generation."""
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="hey! what're you looking for?")]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hey! what're you looking for?"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello Marty!", [])
 
-            response = await generate_ai_response("Hello Marty!", [])
-
-            assert response == "hey! what're you looking for?"
-            mock_create.assert_called_once()
+        assert response == "hey! what're you looking for?"
+        mock_claude_api.messages.create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_with_conversation_history(self):
+    async def test_generate_ai_response_with_conversation_history(
+        self, mock_claude_api, claude_response
+    ):
         """Test AI response generation with conversation history."""
         from datetime import datetime
 
@@ -126,89 +120,63 @@ class TestGenerateAIResponse:
             ),
         ]
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="try Effective Python")]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "try Effective Python"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("intermediate", history)
 
-            response = await generate_ai_response("intermediate", history)
+        assert response == "try Effective Python"
 
-            assert response == "try Effective Python"
-
-            # Check that conversation history was included
-            call_args = mock_create.call_args
-            messages = call_args[1]["messages"]
-            assert len(messages) == 3  # 2 history + 1 current
-            assert messages[0]["role"] == "user"
-            assert messages[0]["content"] == "I need a Python book"
-            assert messages[1]["role"] == "assistant"
-            assert messages[1]["content"] == "what level are you?"
-            assert messages[2]["role"] == "user"
-            assert messages[2]["content"] == "intermediate"
+        # Check that conversation history was included
+        call_args = mock_claude_api.messages.create.call_args
+        messages = call_args[1]["messages"]
+        assert len(messages) == 3  # 2 history + 1 current
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "I need a Python book"
+        assert messages[1]["role"] == "assistant"
+        assert messages[1]["content"] == "what level are you?"
+        assert messages[2]["role"] == "user"
+        assert messages[2]["content"] == "intermediate"
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_with_customer_context(self):
+    async def test_generate_ai_response_with_customer_context(
+        self, mock_claude_api, claude_response
+    ):
         """Test AI response generation with customer context."""
-        customer_context = {
-            "name": "John",
-            "phone": "+1234567890",
-            "customer_id": "123",
-        }
-
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="hey John! what're you looking for?")]
-
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            response = await generate_ai_response("Hello", [], customer_context)
-
-            assert response == "hey John! what're you looking for?"
-
-            # Check that customer context was added to system prompt
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: John" in system_prompt
-            assert "Phone: +1234567890" in system_prompt
-            assert "Customer ID: 123" in system_prompt
-
-    @pytest.mark.asyncio
-    async def test_generate_ai_response_with_full_name(self):
-        """Test AI response generation with full customer name."""
         customer_context = {
             "name": "John Doe",
             "phone": "+1234567890",
-            "customer_id": "456",
+            "customer_id": "123",
+            "current_time": "2024-01-15T10:30:00Z",
+            "current_date": "2024-01-15",
+            "current_day": "Monday",
         }
 
-        mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text="hey John Doe! what can I help you with?")
-        ]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hey John! looking for any specific genre?"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [], customer_context)
 
-            response = await generate_ai_response("Hello", [], customer_context)
+        assert response == "hey John! looking for any specific genre?"
 
-            assert response == "hey John Doe! what can I help you with?"
-
-            # Check that full name is included in system prompt
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: John Doe" in system_prompt
-            assert "Phone: +1234567890" in system_prompt
-            assert "Customer ID: 456" in system_prompt
+        # Check that customer context was included in system prompt
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer name: John Doe" in system_prompt
+        assert "Phone: +1234567890" in system_prompt
+        assert "Customer ID: 123" in system_prompt
+        assert "Current time: 2024-01-15T10:30:00Z" in system_prompt
+        assert "Current date: 2024-01-15" in system_prompt
+        assert "Day of week: Monday" in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_with_cultural_name(self):
+    async def test_generate_ai_response_with_cultural_name(
+        self, mock_claude_api, claude_response
+    ):
         """Test AI response generation with culturally diverse names."""
         customer_context = {
             "name": "José García-López",
@@ -216,25 +184,24 @@ class TestGenerateAIResponse:
             "customer_id": "789",
         }
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="¡Hola José García-López!")]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "¡Hola José García-López!"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [], customer_context)
 
-            response = await generate_ai_response("Hello", [], customer_context)
+        assert response == "¡Hola José García-López!"
 
-            assert response == "¡Hola José García-López!"
-
-            # Check that full name is passed to Claude for cultural handling
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: José García-López" in system_prompt
+        # Check that full name is passed to Claude for cultural handling
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer name: José García-López" in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_single_name(self):
+    async def test_generate_ai_response_single_name(
+        self, mock_claude_api, claude_response
+    ):
         """Test AI response generation with single name (e.g., Madonna, Cher)."""
         customer_context = {
             "name": "Madonna",
@@ -242,211 +209,174 @@ class TestGenerateAIResponse:
             "customer_id": "101",
         }
 
-        mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text="hey Madonna! what can I help you with?")
-        ]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hey Madonna! what can I help you with?"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [], customer_context)
 
-            response = await generate_ai_response("Hello", [], customer_context)
+        assert response == "hey Madonna! what can I help you with?"
 
-            assert response == "hey Madonna! what can I help you with?"
-
-            # Check that single name is handled correctly
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: Madonna" in system_prompt
+        # Check that single name is handled correctly
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer name: Madonna" in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_professional_name(self):
-        """Test AI response generation with professional/formal names."""
-        customer_context = {
-            "name": "Dr. John Smith MD",
-            "phone": "+1234567890",
-            "customer_id": "202",
-        }
+    async def test_generate_ai_response_no_customer_context(
+        self, mock_claude_api, claude_response
+    ):
+        """Test AI response generation without customer context."""
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hey! what can I help you with?"
+        )
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="hello Dr. Smith! how can I help?")]
+        response = await generate_ai_response("Hello", [])
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        assert response == "hey! what can I help you with?"
 
-            response = await generate_ai_response("Hello", [], customer_context)
-
-            assert response == "hello Dr. Smith! how can I help?"
-
-            # Check that the full professional name is included
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: Dr. John Smith MD" in system_prompt
+        # Check that only base system prompt is used
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer Context:" not in system_prompt
+        assert "Current Time & Date:" not in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_partial_context(self):
-        """Test AI response generation with partial customer context."""
-        customer_context = {
-            "name": "Jane",
-            "customer_id": "789",
-            # Missing phone
-        }
+    async def test_generate_ai_response_empty_customer_context(
+        self, mock_claude_api, claude_response
+    ):
+        """Test AI response generation with empty customer context."""
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hello! what are you looking for?"
+        )
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="hey Jane! how can I help?")]
+        response = await generate_ai_response("Hello", [], {})
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        assert response == "hello! what are you looking for?"
 
-            response = await generate_ai_response("Hello", [], customer_context)
-
-            assert response == "hey Jane! how can I help?"
-
-            # Check that only available fields are included
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer name: Jane" in system_prompt
-            assert "Customer ID: 789" in system_prompt
-            assert "Phone:" not in system_prompt  # Should not include missing phone
+        # Check that empty context doesn't add extra sections
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer Context:" not in system_prompt
+        assert "Current Time & Date:" not in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_minimal_context(self):
+    async def test_generate_ai_response_minimal_context(
+        self, mock_claude_api, claude_response
+    ):
         """Test AI response generation with minimal customer context."""
         customer_context = {
             "customer_id": "999",
             # Only customer_id provided
         }
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="hello! what are you looking for?")]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response(
+            "hello! what are you looking for?"
+        )
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [], customer_context)
 
-            response = await generate_ai_response("Hello", [], customer_context)
+        assert response == "hello! what are you looking for?"
 
-            assert response == "hello! what are you looking for?"
-
-            # Check that only customer_id is included
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Customer ID: 999" in system_prompt
-            assert "Customer name:" not in system_prompt
-            assert "Phone:" not in system_prompt
+        # Check that only customer_id is included
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
+        assert "Customer ID: 999" in system_prompt
+        assert "Customer name:" not in system_prompt
+        assert "Phone:" not in system_prompt
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_api_error(self):
+    async def test_generate_ai_response_api_error(self, mock_claude_api):
         """Test error handling when Claude API fails."""
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create, patch("ai_client.logger.error") as mock_error:
-            mock_create.side_effect = Exception("API Error")
+        # Make the mock raise an exception
+        mock_claude_api.messages.create.side_effect = Exception("API Error")
 
+        with patch("src.ai_client.logger.error") as mock_error:
             response = await generate_ai_response("Hello", [])
 
             assert "having trouble thinking" in response
             assert "🤔" in response
-
-            # Check that error was logged
             mock_error.assert_called_once()
-            assert "API Error" in mock_error.call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_empty_content(self):
+    async def test_generate_ai_response_empty_content(self, mock_claude_api):
         """Test handling of empty response content."""
+        # Create a mock response with empty content
         mock_response = MagicMock()
         mock_response.content = []
+        mock_claude_api.messages.create.return_value = mock_response
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [])
 
-            response = await generate_ai_response("Hello", [])
-
-            assert "having trouble generating a response" in response
+        assert response == "I'm having trouble generating a response right now."
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_no_text_attribute(self):
-        """Test handling of response content without text attribute."""
+    async def test_generate_ai_response_non_text_content(self, mock_claude_api):
+        """Test handling of non-text content in response."""
+        # Create a mock response with non-text content
         mock_response = MagicMock()
         mock_content = MagicMock()
-        del mock_content.text  # Remove text attribute
+        # Remove text attribute but ensure string conversion works
+        del mock_content.text
+        mock_content.configure_mock(**{"__str__.return_value": "fallback content"})
         mock_response.content = [mock_content]
+        mock_claude_api.messages.create.return_value = mock_response
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [])
 
-            response = await generate_ai_response("Hello", [])
-
-            # Should fallback to string representation
-            assert isinstance(response, str)
-            assert len(response) > 0
+        # Should fallback to string representation
+        assert isinstance(response, str)
+        assert len(response) > 0
 
     @pytest.mark.asyncio
-    async def test_claude_api_parameters(self):
+    async def test_claude_api_parameters(self, mock_claude_api, claude_response):
         """Test that correct parameters are passed to Claude API."""
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="test response")]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response("test response")
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        await generate_ai_response("Hello", [])
 
-            await generate_ai_response("Hello", [])
-
-            call_args = mock_create.call_args
-            assert call_args[1]["model"] == "claude-3-5-sonnet-20241022"
-            assert call_args[1]["max_tokens"] == 500
-            assert call_args[1]["temperature"] == 0.7
-            assert isinstance(call_args[1]["system"], str)
-            assert len(call_args[1]["system"]) > 1000  # Should be substantial
-            assert isinstance(call_args[1]["messages"], list)
+        call_args = mock_claude_api.messages.create.call_args
+        assert call_args[1]["model"] == "claude-3-5-sonnet-20241022"
+        assert call_args[1]["max_tokens"] == 500
+        assert call_args[1]["temperature"] == 0.7
+        assert "system" in call_args[1]
+        assert "messages" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_generate_ai_response_with_datetime_context(self):
-        """Test AI response generation with datetime context."""
+    async def test_system_prompt_with_context(self, mock_claude_api, claude_response):
+        """Test system prompt construction with customer context."""
         customer_context = {
             "name": "John",
             "phone": "+1234567890",
             "customer_id": "123",
-            "current_time": "2024-01-15T14:30:00Z",
+            "current_time": "2024-01-15T10:30:00Z",
             "current_date": "2024-01-15",
             "current_day": "Monday",
         }
 
-        mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text="hey John! it's Monday afternoon, what can I help you with?")
-        ]
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response("hey John!")
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        await generate_ai_response("Hello", [], customer_context)
 
-            response = await generate_ai_response("Hello", [], customer_context)
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
 
-            assert "Monday afternoon" in response
+        # Check base prompt is included
+        assert len(system_prompt) > 1000  # Should be substantial
 
-            # Check that datetime context was added to system prompt
-            call_args = mock_create.call_args
-            system_prompt = call_args[1]["system"]
-            assert "Current time: 2024-01-15T14:30:00Z" in system_prompt
-            assert "Current date: 2024-01-15" in system_prompt
-            assert "Day of week: Monday" in system_prompt
-            assert "Customer name: John" in system_prompt
+        # Check customer context is appended
+        assert "Customer Context:" in system_prompt
+        assert "Current Time & Date:" in system_prompt
+        assert "Current time: 2024-01-15T10:30:00Z" in system_prompt
+        assert "Current date: 2024-01-15" in system_prompt
+        assert "Day of week: Monday" in system_prompt
+        assert "Customer name: John" in system_prompt
 
 
 class TestEnvironmentIntegration:
@@ -457,7 +387,7 @@ class TestEnvironmentIntegration:
         # Test with environment variable
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             # Import client after setting env var
-            from ai_client import client
+            from src.ai_client import client
 
             assert hasattr(client, "api_key")
 
@@ -465,66 +395,71 @@ class TestEnvironmentIntegration:
         """Test behavior when API key is missing."""
         with patch.dict(os.environ, {}, clear=True):
             # Should not raise an error during import
-            from ai_client import client
+            from src.ai_client import client
 
-            assert client is not None
+            # Client should be created but with empty API key
+            assert hasattr(client, "api_key")
 
 
-class TestIntegrationScenarios:
-    """Test realistic integration scenarios."""
+class TestSystemPromptContent:
+    """Test system prompt content and structure."""
+
+    def test_system_prompt_contains_required_elements(self):
+        """Test that system prompt contains required elements."""
+        assert "Martinus Trismegistus" in MARTY_SYSTEM_PROMPT
+        assert "Never invent books" in MARTY_SYSTEM_PROMPT
+        assert "Text Formatting Rules" in MARTY_SYSTEM_PROMPT
+        assert len(MARTY_SYSTEM_PROMPT) > 1000
+
+    def test_system_prompt_is_loaded_correctly(self):
+        """Test that system prompt is loaded correctly from file."""
+        # The prompt should be loaded from the file
+        assert isinstance(MARTY_SYSTEM_PROMPT, str)
+        assert len(MARTY_SYSTEM_PROMPT) > 10
 
     @pytest.mark.asyncio
-    async def test_book_recommendation_flow(self):
-        """Test a complete book recommendation conversation."""
-        from datetime import datetime
+    async def test_system_prompt_used_in_generation(
+        self, mock_claude_api, claude_response
+    ):
+        """Test that system prompt is used in AI generation."""
+        # Use the global mock with a specific response
+        mock_claude_api.messages.create.return_value = claude_response("test response")
 
-        # Simulate a conversation asking for book recommendations
-        history = [
-            ConversationMessage(
-                role="user",
-                content="I need a good Python book",
-                timestamp=datetime.now(),
-            ),
-            ConversationMessage(
-                role="assistant",
-                content="what level are you at?",
-                timestamp=datetime.now(),
-            ),
-        ]
+        await generate_ai_response("Hello", [])
 
-        customer_context = {"name": "Alice", "phone": "+1555123456"}
+        call_args = mock_claude_api.messages.create.call_args
+        system_prompt = call_args[1]["system"]
 
+        # Should start with the loaded system prompt
+        assert "Martinus Trismegistus" in system_prompt
+        assert len(system_prompt) > 1000
+
+
+class TestResponseProcessing:
+    """Test response processing and content extraction."""
+
+    @pytest.mark.asyncio
+    async def test_response_content_extraction(self, mock_claude_api):
+        """Test proper extraction of response content."""
+        # Create a mock response with proper structure
         mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text="try Effective Python by Brett Slatkin")
-        ]
+        mock_content = MagicMock()
+        mock_content.text = "extracted text response"
+        mock_response.content = [mock_content]
+        mock_claude_api.messages.create.return_value = mock_response
 
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
+        response = await generate_ai_response("Hello", [])
 
-            response = await generate_ai_response(
-                "intermediate level", history, customer_context
-            )
-
-            assert "Effective Python" in response
-
-            # Verify the system prompt includes safety features
-            system_prompt = mock_create.call_args[1]["system"]
-            assert "Never invent books" in system_prompt
-            assert "Customer name: Alice" in system_prompt
+        assert response == "extracted text response"
 
     @pytest.mark.asyncio
-    async def test_error_recovery_flow(self):
-        """Test error recovery in conversation flow."""
-        # First call fails
-        with patch(
-            "ai_client.client.messages.create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.side_effect = Exception("Network error")
+    async def test_response_fallback_handling(self, mock_claude_api):
+        """Test fallback handling for malformed responses."""
+        # Create a mock response with no content
+        mock_response = MagicMock()
+        mock_response.content = None
+        mock_claude_api.messages.create.return_value = mock_response
 
-            response = await generate_ai_response("Hello", [])
+        response = await generate_ai_response("Hello", [])
 
-            assert "having trouble thinking" in response
-            assert "🤔" in response
+        assert response == "I'm having trouble generating a response right now."

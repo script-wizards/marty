@@ -1,10 +1,11 @@
 import json
+import os
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools.conversation.manager import (
+from src.tools.conversation.manager import (
     ConversationContext,
     ConversationManagerTool,
     ConversationMessage,
@@ -14,7 +15,8 @@ from tools.conversation.manager import (
 @pytest.fixture
 async def tool():
     """Create a ConversationManagerTool instance for testing."""
-    tool = ConversationManagerTool("redis://localhost:6379/1")  # Use test database
+    redis_url = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/1")
+    tool = ConversationManagerTool(redis_url)
     yield tool
     await tool.close()
 
@@ -61,6 +63,7 @@ def sample_conversation_context():
     )
 
 
+@pytest.mark.integration
 class TestConversationManagerTool:
     """Test suite for ConversationManagerTool class."""
 
@@ -131,8 +134,8 @@ class TestConversationManagerTool:
         assert len(deserialized.messages) == len(sample_conversation_context.messages)
 
     @pytest.mark.asyncio
-    @patch("database.init_database")
-    @patch("database.AsyncSessionLocal")
+    @patch("src.database.init_database")
+    @patch("src.database.AsyncSessionLocal")
     async def test_load_conversation_from_database(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):
@@ -162,15 +165,19 @@ class TestConversationManagerTool:
         mock_message.timestamp = datetime.now(UTC)
 
         # Mock database functions
-        with patch(
-            "tools.conversation.manager.get_customer_by_phone",
-            return_value=mock_customer,
-        ), patch(
-            "tools.conversation.manager.get_active_conversation",
-            return_value=mock_conversation,
-        ), patch(
-            "tools.conversation.manager.get_conversation_messages",
-            return_value=[mock_message],
+        with (
+            patch(
+                "src.tools.conversation.manager.get_customer_by_phone",
+                return_value=mock_customer,
+            ),
+            patch(
+                "src.tools.conversation.manager.get_active_conversation",
+                return_value=mock_conversation,
+            ),
+            patch(
+                "src.tools.conversation.manager.get_conversation_messages",
+                return_value=[mock_message],
+            ),
         ):
             context = await tool._load_from_database(sample_phone)
 
@@ -181,8 +188,8 @@ class TestConversationManagerTool:
             assert context.messages[0].content == "Hello"
 
     @pytest.mark.asyncio
-    @patch("database.init_database")
-    @patch("database.AsyncSessionLocal")
+    @patch("src.database.init_database")
+    @patch("src.database.AsyncSessionLocal")
     async def test_create_new_conversation(
         self, mock_session_local, mock_init_db, tool, sample_phone
     ):
@@ -202,13 +209,19 @@ class TestConversationManagerTool:
         mock_conversation = MagicMock()
         mock_conversation.id = "conv_123"
 
-        with patch(
-            "tools.conversation.manager.get_customer_by_phone", return_value=None
-        ), patch(
-            "tools.conversation.manager.create_customer", return_value=mock_customer
-        ), patch(
-            "tools.conversation.manager.create_conversation",
-            return_value=mock_conversation,
+        with (
+            patch(
+                "src.tools.conversation.manager.get_customer_by_phone",
+                return_value=None,
+            ),
+            patch(
+                "src.tools.conversation.manager.create_customer",
+                return_value=mock_customer,
+            ),
+            patch(
+                "src.tools.conversation.manager.create_conversation",
+                return_value=mock_conversation,
+            ),
         ):
             context = await tool._create_new_conversation(sample_phone)
 
@@ -270,11 +283,11 @@ class TestConversationManagerTool:
             last_activity=datetime.now(UTC),
         )
 
-        with patch.object(
-            tool, "_load_conversation", return_value=empty_context
-        ), patch.object(
-            tool, "_save_message_to_database", return_value=None
-        ), patch.object(tool, "_cache_conversation", return_value=None):
+        with (
+            patch.object(tool, "_load_conversation", return_value=empty_context),
+            patch.object(tool, "_save_message_to_database", return_value=None),
+            patch.object(tool, "_cache_conversation", return_value=None),
+        ):
             result = await tool.execute(
                 action="add_message",
                 phone=sample_phone,
@@ -353,11 +366,11 @@ class TestConversationManagerTool:
             last_activity=datetime.now(UTC),
         )
 
-        with patch.object(
-            tool, "_load_conversation", return_value=context
-        ), patch.object(
-            tool, "_save_message_to_database", return_value=None
-        ), patch.object(tool, "_cache_conversation", return_value=None):
+        with (
+            patch.object(tool, "_load_conversation", return_value=context),
+            patch.object(tool, "_save_message_to_database", return_value=None),
+            patch.object(tool, "_cache_conversation", return_value=None),
+        ):
             result = await tool.execute(
                 action="add_message",
                 phone=sample_phone,

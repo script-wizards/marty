@@ -37,7 +37,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(PROJECT_ROOT / "logs" / "chat_with_marty.log"),
+        logging.FileHandler(str(PROJECT_ROOT / "logs" / "chat.log")),
         logging.StreamHandler(),
     ],
 )
@@ -113,7 +113,7 @@ class MartyChat:
         """Print the chat banner."""
         banner = f"""
 {Fore.CYAN}🧙 Marty Terminal Chat{Style.RESET_ALL}
-{Fore.CYAN}{'=' * 40}{Style.RESET_ALL}
+{Fore.CYAN}{"=" * 40}{Style.RESET_ALL}
 {Fore.YELLOW}Commands:{Style.RESET_ALL}
 """
         for cmd, desc in self.config.commands.items():
@@ -145,7 +145,7 @@ class MartyChat:
         self, role: str, content: str, timestamp: datetime | None = None
     ) -> None:
         """Add a message to conversation history."""
-        from ai_client import ConversationMessage
+        from src.ai_client import ConversationMessage
 
         if timestamp is None:
             timestamp = datetime.now(UTC)
@@ -199,7 +199,7 @@ class MartyChat:
 
     async def _get_initial_response(self) -> str:
         """Get Marty's initial greeting."""
-        from ai_client import generate_ai_response
+        from src.ai_client import generate_ai_response
 
         try:
             response = await generate_ai_response(
@@ -214,7 +214,7 @@ class MartyChat:
 
     async def _get_ai_response(self, user_input: str) -> str:
         """Get AI response for user input."""
-        from ai_client import generate_ai_response
+        from src.ai_client import generate_ai_response
 
         try:
             response = await generate_ai_response(
