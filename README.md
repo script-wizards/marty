@@ -35,8 +35,10 @@ marty is a burnt-out wizard who used to do software engineering and now works at
 - uv (for dependency management)
 - just (for command running)
 - postgresql database (supabase recommended)
+- redis server (for rate limiting and caching)
 - anthropic api key
 - hardcover api token
+- sinch sms api credentials
 
 ## Setup
 
@@ -73,10 +75,11 @@ required environment variables:
 DATABASE_URL=postgresql+asyncpg://user:password@host:5432/dbname
 ANTHROPIC_API_KEY=your_claude_api_key_here
 HARDCOVER_API_TOKEN=Bearer your_hardcover_token_here
-SINCH_KEY_ID=your_sinch_key_id
-SINCH_KEY_SECRET=your_sinch_key_secret
-SINCH_PROJECT_ID=your_sinch_project_id
+SINCH_API_TOKEN=your_sinch_api_token
+SINCH_SERVICE_PLAN_ID=your_service_plan_id
+SINCH_FROM_NUMBER=your_virtual_phone_number
 SINCH_WEBHOOK_SECRET=your_webhook_secret
+REDIS_URL=redis://localhost:6379/0
 ```
 
 ### Database Setup
@@ -314,10 +317,15 @@ add token as HARDCOVER_API_TOKEN=Bearer your_token
 - ANTHROPIC_API_KEY: claude ai api key
 - HARDCOVER_API_TOKEN: book data api token
 - BOOKSHOP_AFFILIATE_ID: optional affiliate links
-- SINCH_KEY_ID: sinch api key identifier
-- SINCH_KEY_SECRET: sinch api key secret
-- SINCH_PROJECT_ID: sinch project identifier
+- SINCH_API_TOKEN: sinch api token for sms sending
+- SINCH_SERVICE_PLAN_ID: sinch service plan identifier
+- SINCH_FROM_NUMBER: virtual phone number for sending sms
 - SINCH_WEBHOOK_SECRET: webhook signature verification
+- REDIS_URL: redis connection string for rate limiting
+- SMS_RATE_LIMIT: messages per window (default: 5)
+- SMS_RATE_LIMIT_WINDOW: rate limit window in seconds (default: 60)
+- SMS_RATE_LIMIT_BURST: burst limit per hour (default: 10)
+- DEFAULT_PHONE_REGION: default region for phone parsing (default: US)
 - DEBUG: true/false
 - LOG_LEVEL: INFO/DEBUG
 
@@ -356,13 +364,13 @@ implemented:
 - hardcover api integration
 - comprehensive test suite
 - terminal chat interface
+- sms webhook handler with signature verification
+- sms provider integration with multi-message support
+- redis-based rate limiting with burst protection
+- phone number validation and normalization
 
 in development:
-- sms webhook handler for receiving text messages
-- sms provider integration for sending responses
 - square api for payments
-- redis caching layer
-- rate limiting
 - purchase flow
 - inventory management
 

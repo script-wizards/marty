@@ -22,9 +22,9 @@
 - [x] Get Hardcover API key
 - [x] Register with Anthropic for Claude API
 - [x] Get Claude API key
-- [ ] Set up Sinch account and get credentials
-- [ ] Configure Sinch webhook URL
-- [ ] Get Sinch API Token and Service Plan ID
+- [x] Set up Sinch account and get credentials
+- [x] Configure Sinch webhook URL
+- [x] Get Sinch API Token and Service Plan ID
 - [x] Set up Bookshop.org affiliate account
 - [x] Create Railway account
 
@@ -140,58 +140,93 @@
 
 ### Webhook Endpoint
 
-- [ ] Create `sms_handler.py` module with FastAPI dependency injection
-- [ ] Implement POST /webhook/sms endpoint with Pydantic validation
-- [ ] Create Pydantic models for webhook payloads
-- [ ] Validate required fields with Pydantic
-- [ ] Add structured logging with correlation IDs
-- [ ] Set up Redis for message queuing
+- [x] Create `sms_handler.py` module with FastAPI dependency injection
+- [x] Implement POST /webhook/sms endpoint with Pydantic validation
+- [x] Create Pydantic models for webhook payloads
+- [x] Validate required fields with Pydantic
+- [x] Add structured logging with correlation IDs
+- [x] Set up Redis for message queuing
 
 ### Security
 
-- [ ] Implement HMAC signature verification as FastAPI middleware
-- [ ] Test with valid signatures
-- [ ] Test with invalid signatures
-- [ ] Handle missing signature header
-- [ ] Add IP allowlist if provided by SMS provider
-- [ ] Add request validation with Pydantic
+- [x] Implement HMAC signature verification as FastAPI middleware
+- [x] Add timestamp validation for replay attack protection
+- [x] Test with valid signatures
+- [x] Test with invalid signatures
+- [x] Handle missing signature header
+- [x] Add request validation with Pydantic
+- [x] Implement configurable signature age limits (5-minute window)
 
 ### Message Processing
 
-- [ ] Store incoming messages in database
-- [ ] Mark messages as pending
-- [ ] Return 200 immediately (non-blocking pattern)
-- [ ] Use FastAPI background tasks for message processing
-- [ ] Set up Redis message queuing
-- [ ] Add timestamp tracking
+- [x] Store incoming messages in database
+- [x] Mark messages as pending
+- [x] Return 200 immediately (non-blocking pattern)
+- [x] Use FastAPI background tasks for message processing
+- [x] Set up Redis message queuing
+- [x] Add timestamp tracking
 
 ### Rate Limiting
 
-- [ ] Implement Redis-based rate limiting with sliding windows
-- [ ] Track per-phone number limits
-- [ ] Handle rate limit exceeded
-- [ ] Clean up old rate limit records automatically
-- [ ] Test rate limiting logic with Redis
+- [x] Implement Redis-based rate limiting with sliding windows
+- [x] Implement Redis connection pooling for performance
+- [x] Track per-phone number limits
+- [x] Add burst protection (separate hourly limits)
+- [x] Handle rate limit exceeded with Marty's voice
+- [x] Clean up old rate limit records automatically
+- [x] Test rate limiting logic with Redis
+- [x] Make rate limits configurable via environment variables
 
 ### SMS Provider Integration
 
-- [ ] Choose SMS provider (Sinch selected)
-- [ ] Implement Sinch SMS sending client
-- [ ] Create mock Sinch response function for testing
-- [ ] Log outgoing messages with structured logging
-- [ ] Simulate SMS sending with delays
-- [ ] Add response delay simulation
-- [ ] Track sent messages in Redis
+- [x] Choose SMS provider (Sinch selected)
+- [x] Implement Sinch SMS sending client with Bearer token auth
+- [x] Create mock Sinch response function for testing
+- [x] Log outgoing messages with structured logging
+- [x] Add phone number validation and normalization
+- [x] Implement configurable default region for phone parsing
+- [x] Add GSM-7 character set validation and filtering
+- [x] Implement multi-message SMS splitting for natural conversation flow
+- [x] Add message delays between SMS sends for realistic texting
+- [x] Track sent messages in Redis
 
 ### Webhook Testing
 
-- [ ] Create `test_sms_handler.py` with pytest
-- [ ] Test valid webhook requests
-- [ ] Test signature verification
-- [ ] Test missing fields with Pydantic validation
-- [ ] Test rate limiting with Redis
-- [ ] Test database integration
-- [ ] Test FastAPI background tasks
+- [x] Create `test_sms_handler.py` with pytest
+- [x] Test valid webhook requests
+- [x] Test signature verification with timestamp validation
+- [x] Test missing fields with Pydantic validation
+- [x] Test rate limiting with Redis (both regular and burst limits)
+- [x] Test database integration
+- [x] Test FastAPI background tasks
+- [x] Test phone number normalization and validation
+- [x] Test GSM-7 character filtering
+- [x] Test multi-message SMS splitting
+- [x] Add integration tests with real Redis
+- [x] Test error messages in Marty's voice
+
+### SMS Enhancements Completed
+
+- [x] Unified signature verification API (removed redundant functions)
+- [x] Added timestamp validation for replay attack protection
+- [x] Configurable signature age limits (5-minute window default)
+- [x] Enhanced error messages in Marty's voice
+- [x] Implemented Redis connection pooling
+- [x] Configurable rate limiting (regular + burst protection)
+- [x] Environment variable configuration for all limits
+- [x] Efficient Redis key management with TTL
+- [x] Multi-message SMS splitting for natural conversation flow
+- [x] GSM-7 character validation and filtering
+- [x] Phone number normalization with configurable regions
+- [x] Message delays between SMS sends for realistic texting
+- [x] Comprehensive test coverage (unit + integration)
+- [x] Fixed event loop conflicts in async tests
+- [x] Clean API design with proper type hints
+- [x] Removed verbose comments and improved readability
+- [x] Fast CI tests (unit tests with mocks)
+- [x] Full CI tests (integration tests with real Redis)
+- [x] Separate test markers for different test types
+- [x] Async test client for proper Redis integration testing
 
 ## Step 4: Square Customer Integration (Redis Caching)
 
@@ -528,6 +563,9 @@
 - [x] Implement message flow with efficient pipelines
 - [x] Handle all paths with comprehensive error handling
 - [x] Add state management with Redis persistence
+- [x] Integrate SMS webhook handler with AI processing
+- [x] Implement multi-message SMS responses
+- [x] Add rate limiting and security to message flow
 
 ### App Integration
 
@@ -565,9 +603,15 @@
 
 - [x] Test new customer flow with realistic scenarios
 - [x] Test returning customer with conversation history
+- [x] Test SMS webhook processing with real messages
+- [x] Test multi-message SMS responses
+- [x] Test rate limiting with burst scenarios
+- [x] Test signature verification and replay protection
+- [x] Test phone number validation and normalization
+- [x] Test GSM-7 character filtering
+- [x] Test error messages in Marty's voice
 - [~] Test complete purchase with payment integration
 - [~] Test error scenarios with chaos engineering
-- [~] Test rate limiting with burst traffic
 - [x] Test all integrations with comprehensive coverage
 
 ## Deployment & Launch
