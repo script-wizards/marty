@@ -182,8 +182,9 @@ if __name__ == "__main__":
     from hypercorn.config import Config
 
     config = Config()
-    config.bind = ["[::]:8000"]  # Dual stack IPv4/IPv6 binding
-    config.use_reloader = True
+    port = int(os.getenv("PORT", "8000"))
+    config.bind = [f"[::]:{port}"]  # Dual-stack IPv4/IPv6 binding for Railway
+    config.use_reloader = os.getenv("ENV") == "development"
 
     import asyncio
 
