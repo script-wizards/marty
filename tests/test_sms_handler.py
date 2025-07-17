@@ -2,14 +2,16 @@ import base64
 import hashlib
 import hmac
 import json
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from src.sms_handler import rate_limit, router
+from src.main import app
+from src.sms_handler import rate_limit
 from src.tools.external.sinch import (
     SinchSMSWebhookPayload,
     normalize_phone_number,
@@ -17,8 +19,6 @@ from src.tools.external.sinch import (
     verify_sinch_signature,
 )
 
-app = FastAPI()
-app.include_router(router)
 client = TestClient(app)
 
 
@@ -113,22 +113,47 @@ class TestSignatureVerification:
         payload = {"test": "data"}
         payload_str = json.dumps(payload)
         signature = create_signature(payload_str, webhook_secret)
-        assert verify_sinch_signature(payload_str.encode(), signature, webhook_secret)
+        current_time = str(int(time.time()))
+        assert verify_sinch_signature(
+            payload_str.encode(), signature, webhook_secret, current_time
+        )
 
     def test_verify_sinch_signature_invalid(self, webhook_secret):
         payload = {"test": "data"}
         payload_str = json.dumps(payload)
         signature = "invalid-signature"
+        current_time = str(int(time.time()))
         assert not verify_sinch_signature(
-            payload_str.encode(), signature, webhook_secret
+            payload_str.encode(), signature, webhook_secret, current_time
         )
 
     def test_verify_sinch_signature_wrong_secret(self):
         payload = {"test": "data"}
         payload_str = json.dumps(payload)
         signature = create_signature(payload_str, "wrong-secret")
+        current_time = str(int(time.time()))
         assert not verify_sinch_signature(
-            payload_str.encode(), signature, "correct-secret"
+            payload_str.encode(), signature, "correct-secret", current_time
+        )
+
+    def test_verify_sinch_signature_old_timestamp(self, webhook_secret):
+        payload = {"test": "data"}
+        payload_str = json.dumps(payload)
+        signature = create_signature(payload_str, webhook_secret)
+        old_time = str(
+            int(time.time()) - 400
+        )  # 400 seconds ago (older than 5 min limit)
+        assert not verify_sinch_signature(
+            payload_str.encode(), signature, webhook_secret, old_time
+        )
+
+    def test_verify_sinch_signature_future_timestamp(self, webhook_secret):
+        payload = {"test": "data"}
+        payload_str = json.dumps(payload)
+        signature = create_signature(payload_str, webhook_secret)
+        future_time = str(int(time.time()) + 100)  # 100 seconds in future
+        assert not verify_sinch_signature(
+            payload_str.encode(), signature, webhook_secret, future_time
         )
 
 
@@ -138,8 +163,14 @@ class TestRateLimiting:
         mock_redis.incr.return_value = 1
         mock_redis.expire = AsyncMock()
         await rate_limit("+12125551234", mock_redis)
-        mock_redis.incr.assert_called_once_with("sms:rate:+12125551234")
-        mock_redis.expire.assert_called_once_with("sms:rate:+12125551234", 60)
+        # Should call incr twice: once for rate limit, once for burst protection
+        assert mock_redis.incr.call_count == 2
+        mock_redis.incr.assert_any_call("sms:rate:+12125551234")
+        mock_redis.incr.assert_any_call("sms:burst:+12125551234")
+        # Should call expire twice: once for rate limit, once for burst protection
+        assert mock_redis.expire.call_count == 2
+        mock_redis.expire.assert_any_call("sms:rate:+12125551234", 60)
+        mock_redis.expire.assert_any_call("sms:burst:+12125551234", 3600)
 
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded(self, mock_redis):
@@ -148,35 +179,65 @@ class TestRateLimiting:
             await rate_limit("+12125551234", mock_redis)
         exception: HTTPException = exc_info.value  # type: ignore
         assert exception.status_code == 429
-        assert "Rate limit exceeded" in str(exception.detail)
+        assert "whoa slow down there, give me a sec to catch up" in str(
+            exception.detail
+        )
 
     @pytest.mark.asyncio
     async def test_rate_limit_within_limit(self, mock_redis):
         mock_redis.incr.return_value = 3  # in limit
         await rate_limit("+12125551234", mock_redis)
-        mock_redis.incr.assert_called_once_with("sms:rate:+12125551234")
+        # Should call incr twice: once for rate limit, once for burst protection
+        assert mock_redis.incr.call_count == 2
+        mock_redis.incr.assert_any_call("sms:rate:+12125551234")
+        mock_redis.incr.assert_any_call("sms:burst:+12125551234")
+
+    @pytest.mark.asyncio
+    async def test_burst_limit_exceeded(self, mock_redis):
+        # Mock rate limit as OK but burst limit exceeded
+        mock_redis.incr.side_effect = [
+            3,
+            11,
+        ]  # rate=3 (OK), burst=11 (exceeds limit of 10)
+        with pytest.raises(HTTPException) as exc_info:
+            await rate_limit("+12125551234", mock_redis)
+        exception: HTTPException = exc_info.value  # type: ignore
+        assert exception.status_code == 429
+        assert "whoa slow down there, give me a sec to catch up" in str(
+            exception.detail
+        )
 
 
 class TestSMSWebhook:
     def test_webhook_missing_signature_header(self):
-        response = client.post("/webhook/sms", json={"invalid": "data"})
+        current_time = str(int(time.time()))
+        headers = {"x-sinch-timestamp": current_time}
+        response = client.post(
+            "/webhook/sms", json={"invalid": "data"}, headers=headers
+        )
         assert response.status_code == 422  # FastAPI validation error
 
     @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
     def test_webhook_invalid_signature(self, valid_webhook_payload):
-        headers = {"x-sinch-signature": "invalid-signature"}
+        current_time = str(int(time.time()))
+        headers = {
+            "x-sinch-signature": "invalid-signature",
+            "x-sinch-timestamp": current_time,
+        }
         response = client.post(
             "/webhook/sms", json=valid_webhook_payload, headers=headers
         )
         assert response.status_code == 401
 
     @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
+    @pytest.mark.integration
     def test_webhook_valid_signature(
         self, valid_webhook_payload, mock_redis, mock_sinch_client
     ):
+        current_time = str(int(time.time()))
         payload_str = json.dumps(valid_webhook_payload)
         signature = create_signature(payload_str, "test-secret")
-        headers = {"x-sinch-signature": signature}
+        headers = {"x-sinch-signature": signature, "x-sinch-timestamp": current_time}
         mock_redis.incr.return_value = 1
         mock_redis.expire = AsyncMock()
         response = client.post("/webhook/sms", content=payload_str, headers=headers)
@@ -185,7 +246,11 @@ class TestSMSWebhook:
 
     @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", None)
     def test_webhook_no_secret_configured(self, valid_webhook_payload):
-        headers = {"x-sinch-signature": "some-signature"}
+        current_time = str(int(time.time()))
+        headers = {
+            "x-sinch-signature": "some-signature",
+            "x-sinch-timestamp": current_time,
+        }
         response = client.post(
             "/webhook/sms", json=valid_webhook_payload, headers=headers
         )
@@ -193,10 +258,11 @@ class TestSMSWebhook:
 
     @patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "test-secret")
     def test_webhook_invalid_payload(self):
+        current_time = str(int(time.time()))
         invalid_payload = {"invalid": "data"}
         payload_str = json.dumps(invalid_payload)
         signature = create_signature(payload_str, "test-secret")
-        headers = {"x-sinch-signature": signature}
+        headers = {"x-sinch-signature": signature, "x-sinch-timestamp": current_time}
         response = client.post("/webhook/sms", content=payload_str, headers=headers)
         assert response.status_code == 400
 
@@ -335,47 +401,35 @@ class TestRedisIntegration:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_rate_limit_with_real_redis(self, test_redis):
+        """Test rate limiting directly with real Redis to avoid event loop conflicts."""
         phone = "+12125551234"
-        payload = {
-            "id": "test-id",
-            "type": "mo_text",
-            "from": {"type": "number", "endpoint": phone},
-            "to": {"type": "number", "endpoint": "+19876543210"},
-            "message": "Integration test message",
-            "received_at": "2024-07-17T00:00:00Z",
-        }
-        payload_str = json.dumps(payload)
-        headers = {"x-sinch-signature": "integration-test"}
 
-        with patch("src.sms_handler.config.SINCH_WEBHOOK_SECRET", "integration-secret"):
-            with patch("src.sms_handler.verify_sinch_signature", return_value=True):
-                with patch("src.sms_handler.get_redis", return_value=test_redis):
-                    with patch(
-                        "src.sms_handler.get_sinch_client", return_value=AsyncMock()
-                    ):
-                        # Test real rate limiting with actual Redis
-                        # First 5 requests should succeed
-                        for _ in range(5):
-                            response = client.post(
-                                "/webhook/sms",
-                                content=payload_str,
-                                headers=headers,
-                            )
-                            assert response.status_code == 200
+        # Test rate limiting function directly with real Redis
+        # First 5 calls should succeed
+        for _i in range(5):
+            await rate_limit(phone, test_redis)
 
-                        # 6th request should be rate limited
-                        response = client.post(
-                            "/webhook/sms", content=payload_str, headers=headers
-                        )
-                        assert response.status_code == 429
-                        assert "Rate limit exceeded" in response.text
+        # 6th call should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            await rate_limit(phone, test_redis)
 
-                        # Verify rate limit key exists and has correct value
-                        rate_key = f"sms:rate:{phone}"
-                        count = await test_redis.get(rate_key)
-                        assert count is not None
-                        assert int(count) == 6
+        assert exc_info.value.status_code == 429
+        assert "whoa slow down there, give me a sec to catch up" in str(
+            exc_info.value.detail
+        )
 
-                        # Verify TTL is set
-                        ttl = await test_redis.ttl(rate_key)
-                        assert ttl > 0
+        # Verify rate limit key exists and has correct value
+        rate_key = f"sms:rate:{phone}"
+        count = await test_redis.get(rate_key)
+        assert count is not None
+        assert int(count) == 6
+
+        # Verify TTL is set
+        ttl = await test_redis.ttl(rate_key)
+        assert ttl > 0
+
+        # Verify burst key exists
+        burst_key = f"sms:burst:{phone}"
+        burst_count = await test_redis.get(burst_key)
+        assert burst_count is not None
+        assert int(burst_count) == 6

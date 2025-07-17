@@ -32,8 +32,11 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-RATE_LIMIT = 5  # messages per window
-RATE_LIMIT_WINDOW = 60  # seconds
+
+# Configurable rate limiting
+RATE_LIMIT = int(os.getenv("SMS_RATE_LIMIT", "5"))  # messages per window
+RATE_LIMIT_WINDOW = int(os.getenv("SMS_RATE_LIMIT_WINDOW", "60"))  # seconds
+RATE_LIMIT_BURST = int(os.getenv("SMS_RATE_LIMIT_BURST", "10"))  # burst allowance
 
 # SMS configuration
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
@@ -44,6 +47,39 @@ GSM7_BASIC = (
     "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
+
+# Redis connection pool
+_redis_pool: redis.ConnectionPool | None = None
+
+
+def get_redis_pool() -> redis.ConnectionPool:
+    """Get Redis connection pool with singleton pattern."""
+    global _redis_pool
+    if _redis_pool is None:
+        try:
+            _redis_pool = redis.ConnectionPool.from_url(
+                REDIS_URL,
+                decode_responses=True,
+                max_connections=20,
+                retry_on_timeout=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to initialize Redis connection pool: {e}"
+            ) from e
+
+    if _redis_pool is None:
+        raise RuntimeError("Redis connection pool is unexpectedly None")
+
+    return _redis_pool  # type: ignore[return-value]
+
+
+async def get_redis():
+    """Get Redis connection from pool."""
+    pool = get_redis_pool()
+    return redis.Redis(connection_pool=pool)
 
 
 def is_gsm7(text: str) -> bool:
@@ -168,17 +204,43 @@ async def send_multiple_sms(
             raise
 
 
-async def get_redis():
-    return redis.from_url(REDIS_URL, decode_responses=True)
-
-
 async def rate_limit(phone: str, redis) -> None:
+    """
+    Enhanced rate limiting with configurable limits and burst protection.
+
+    Args:
+        phone: Phone number to rate limit
+        redis: Redis connection
+
+    Raises:
+        HTTPException: If rate limit is exceeded
+    """
+    # Regular rate limiting
     key = f"sms:rate:{phone}"
     count = await redis.incr(key)
     if count == 1:
         await redis.expire(key, RATE_LIMIT_WINDOW)
+
+    # Burst protection
+    burst_key = f"sms:burst:{phone}"
+    burst_count = await redis.incr(burst_key)
+    if burst_count == 1:
+        await redis.expire(burst_key, 3600)  # 1 hour window for burst
+
+    # Check limits
     if count > RATE_LIMIT:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        logger.warning(f"Rate limit exceeded for {phone}: {count}/{RATE_LIMIT}")
+        raise HTTPException(
+            status_code=429, detail="whoa slow down there, give me a sec to catch up"
+        )
+
+    if burst_count > RATE_LIMIT_BURST:
+        logger.warning(
+            f"Burst limit exceeded for {phone}: {burst_count}/{RATE_LIMIT_BURST}"
+        )
+        raise HTTPException(
+            status_code=429, detail="whoa slow down there, give me a sec to catch up"
+        )
 
 
 async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
@@ -189,7 +251,6 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
     logger.info(f"Processing SMS from {phone}: {user_message}")
 
     try:
-        # Get database session using proper async context manager
         async with get_db_session() as db:
             # Get or create customer
             customer = await get_customer_by_phone(db, phone)
@@ -272,10 +333,14 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
 
     except Exception as e:
         logger.error(f"Error processing SMS from {phone}: {e}")
-        # Send error message to user
+        # Send error message in Marty's voice
+        error_message = "sorry my brain's lagging, give me a moment"
+        if not is_gsm7(error_message):
+            error_message = gsm7_safe(error_message)
+
         try:
             await get_sinch_client().send_sms(
-                body="Sorry, I'm having trouble processing your message right now. Please try again later!",
+                body=error_message,
                 to=[phone],
                 from_=payload.to["endpoint"],
             )
@@ -288,18 +353,19 @@ async def sms_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
     x_sinch_signature: str = Header(...),
+    x_sinch_timestamp: str = Header(..., alias="X-Sinch-Timestamp"),
     redis=Depends(get_redis),
 ):
     raw_body = await request.body()
-    # Verify signature
+    # Verify signature and timestamp
     if not config.SINCH_WEBHOOK_SECRET:
         logger.error("Sinch webhook secret not configured")
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
     if not verify_sinch_signature(
-        raw_body, x_sinch_signature, config.SINCH_WEBHOOK_SECRET
+        raw_body, x_sinch_signature, config.SINCH_WEBHOOK_SECRET, x_sinch_timestamp
     ):
-        logger.warning("Invalid Sinch webhook signature")
-        raise HTTPException(status_code=401, detail="Invalid signature")
+        logger.warning("Invalid Sinch webhook signature or timestamp")
+        raise HTTPException(status_code=401, detail="Invalid signature or timestamp")
     # Parse payload
     try:
         payload = SinchSMSWebhookPayload.model_validate_json(raw_body)
