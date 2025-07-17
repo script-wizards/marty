@@ -37,6 +37,14 @@ class Config:
     # Bookshop.org Affiliate Integration (to be added)
     BOOKSHOP_AFFILIATE_ID: str | None = os.getenv("BOOKSHOP_AFFILIATE_ID")
 
+    # SMS Configuration
+    SMS_MULTI_MESSAGE_ENABLED: bool = (
+        os.getenv("SMS_MULTI_MESSAGE_ENABLED", "true").lower() == "true"
+    )
+    SMS_MESSAGE_DELAY: float = float(
+        os.getenv("SMS_MESSAGE_DELAY", "0.5")
+    )  # seconds between messages
+
     @classmethod
     def validate_hardcover_setup(cls) -> bool:
         """Validate that Hardcover API is properly configured."""

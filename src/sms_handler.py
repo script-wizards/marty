@@ -34,6 +34,144 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 RATE_LIMIT = 5  # messages per window
 RATE_LIMIT_WINDOW = 60  # seconds
 
+# SMS configuration
+MAX_SMS_LENGTH = 160  # Standard SMS character limit
+MAX_UNICODE_LENGTH = 70  # Unicode SMS character limit
+
+
+def is_gsm7(text: str) -> bool:
+    """
+    Check if the text contains only GSM-7 basic characters.
+    """
+    # GSM-7 basic character set (strict - no accented characters)
+    GSM7_BASIC = (
+        "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    )
+    for c in text:
+        if c not in GSM7_BASIC:
+            return False
+    return True
+
+
+def gsm7_safe(text: str) -> str:
+    """
+    Replace non-GSM-7 characters with '?'.
+    """
+    # GSM-7 basic character set (strict - no accented characters)
+    GSM7_BASIC = (
+        "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    )
+    return "".join(c if c in GSM7_BASIC else "?" for c in text)
+
+
+def split_response_for_sms(response: str) -> list[str]:
+    """
+    Split AI response into multiple SMS messages for conversational style.
+
+    Args:
+        response: The full AI response text
+
+    Returns:
+        List of SMS messages, each optimized for conversational flow
+    """
+    if not response.strip():
+        return []
+
+    # Clean up the response
+    response = response.strip()
+
+    # If response is short enough for one SMS, return as-is
+    if len(response) <= MAX_SMS_LENGTH:
+        return [response]
+
+    # Split by sentences first (natural conversation breaks)
+    sentences = []
+    current_sentence = ""
+
+    for char in response:
+        current_sentence += char
+        if char in ".!?":
+            sentences.append(current_sentence.strip())
+            current_sentence = ""
+
+    # Add any remaining text
+    if current_sentence.strip():
+        sentences.append(current_sentence.strip())
+
+    # Group sentences into SMS messages
+    messages = []
+    current_message = ""
+
+    for sentence in sentences:
+        # If adding this sentence would exceed SMS limit
+        if len(current_message + sentence) > MAX_SMS_LENGTH:
+            if current_message:
+                messages.append(current_message.strip())
+                current_message = sentence
+            else:
+                # Single sentence is too long, split by words
+                words = sentence.split()
+                for word in words:
+                    if len(current_message + " " + word) > MAX_SMS_LENGTH:
+                        if current_message:
+                            messages.append(current_message.strip())
+                            current_message = word
+                        else:
+                            # Single word is too long, split it
+                            while len(word) > MAX_SMS_LENGTH:
+                                messages.append(word[:MAX_SMS_LENGTH])
+                                word = word[MAX_SMS_LENGTH:]
+                            if word:
+                                current_message = word
+                    else:
+                        current_message += (" " + word) if current_message else word
+        else:
+            current_message += (" " + sentence) if current_message else sentence
+
+    # Add the last message
+    if current_message.strip():
+        messages.append(current_message.strip())
+
+    return messages
+
+
+async def send_multiple_sms(
+    messages: list[str], to_phone: str, from_number: str
+) -> None:
+    """
+    Send multiple SMS messages with proper spacing for conversational flow.
+    Each message is checked for GSM-7 compliance; non-GSM-7 characters are replaced with '?'.
+    """
+    if not messages:
+        return
+
+    for i, message in enumerate(messages):
+        safe_message = message
+        if not is_gsm7(message):
+            logger.warning(
+                f"Non-GSM-7 characters detected in SMS to {to_phone}. Replacing with '?'. Original: {message}"
+            )
+            safe_message = gsm7_safe(message)
+        try:
+            await sinch_client.send_sms(
+                body=safe_message,
+                to=[to_phone],
+                from_=from_number,
+            )
+            logger.info(f"Sent SMS {i + 1}/{len(messages)} to {to_phone}")
+            # Add small delay between messages for natural flow
+            if i < len(messages) - 1:
+                import asyncio
+
+                await asyncio.sleep(config.SMS_MESSAGE_DELAY)
+        except Exception as e:
+            logger.error(
+                f"Failed to send SMS {i + 1}/{len(messages)} to {to_phone}: {e}"
+            )
+            raise
+
 
 async def get_redis():
     return redis.from_url(REDIS_URL, decode_responses=True)
@@ -123,23 +261,26 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
                 customer_context=customer_context,
             )
 
-            # Save the AI response
-            response_message = MessageCreate(
-                conversation_id=conversation.id,
-                direction="outbound",
-                content=ai_response,
-                status="sent",
-            )
-            await add_message(db, response_message)
+            # Split AI response into multiple SMS messages if enabled
+            if config.SMS_MULTI_MESSAGE_ENABLED:
+                messages_to_send = split_response_for_sms(ai_response)
+            else:
+                messages_to_send = [ai_response]
 
-            # Send SMS response
-            await sinch_client.send_sms(
-                body=ai_response,
-                to=[phone],
-                from_=payload.to["endpoint"],
-            )
+            # Save each SMS message to database
+            for message_text in messages_to_send:
+                response_message = MessageCreate(
+                    conversation_id=conversation.id,
+                    direction="outbound",
+                    content=message_text,
+                    status="sent",
+                )
+                await add_message(db, response_message)
 
-            logger.info(f"Sent AI response to {phone}")
+            # Send all SMS messages
+            await send_multiple_sms(messages_to_send, phone, payload.to["endpoint"])
+
+            logger.info(f"Sent {len(messages_to_send)} SMS messages to {phone}")
             break  # Exit the generator loop
 
     except Exception as e:
