@@ -46,15 +46,22 @@ def init_database():
     """Initialize database engine and session factory."""
     global engine, AsyncSessionLocal
     if engine is None:
-        # Determine if we're using PostgreSQL/Supabase
+        # Determine if we're using PostgreSQL
         is_postgres = DATABASE_URL.startswith(
             ("postgresql://", "postgresql+asyncpg://")
         )
 
         if is_postgres:
-            # Supabase/PostgreSQL configuration
+            # Convert postgresql:// to postgresql+asyncpg:// for async driver
+            async_db_url = DATABASE_URL
+            if async_db_url.startswith("postgresql://"):
+                async_db_url = async_db_url.replace(
+                    "postgresql://", "postgresql+asyncpg://", 1
+                )
+
+            # PostgreSQL configuration (Railway/Supabase)
             engine = create_async_engine(
-                DATABASE_URL,
+                async_db_url,
                 echo=False,  # Set to True for debugging
                 pool_size=20,
                 max_overflow=0,
