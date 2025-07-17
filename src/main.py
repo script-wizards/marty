@@ -121,13 +121,19 @@ app = FastAPI(
 
 
 @app.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    """Enhanced health check endpoint with database connectivity."""
+async def health_check(
+    db: AsyncSession = Depends(get_db), include_migrations: bool = False
+):
+    """Enhanced health check endpoint with database connectivity.
+
+    Args:
+        include_migrations: Whether to include migration status check (default: False)
+                           Can be enabled with ?include_migrations=true
+    """
     try:
         result = await db.execute(text("SELECT 1"))
         db_status = "ok" if result.fetchone() else "error"
 
-        # Parse database type from URL
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
         try:
             parsed_url = urlparse(db_url)
@@ -137,39 +143,42 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         except Exception:
             db_type = "unknown"
 
-        # Check migration status
-        migration_status = "ok"
-        try:
-            alembic_cfg = AlembicConfig("alembic.ini")
-            from alembic.runtime.migration import MigrationContext
-            from alembic.script import ScriptDirectory
-
-            # Use sync connection from engine for migration check
-            if engine:
-                sync_engine = engine.sync_engine
-                with sync_engine.connect() as conn:
-                    migration_ctx = MigrationContext.configure(conn)
-                    current_rev = migration_ctx.get_current_revision()
-
-                script_dir = ScriptDirectory.from_config(alembic_cfg)
-                head_rev = script_dir.get_current_head()
-
-                if current_rev != head_rev:
-                    migration_status = "pending"
-            else:
-                migration_status = "unknown"
-        except Exception as e:
-            logger.debug(f"Could not check migration status: {e}")
-            migration_status = "unknown"
-
-        return {
+        response = {
             "status": "ok",
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
-            "migrations": {"status": migration_status},
             "environment": os.getenv("ENV", "development"),
         }
+
+        if include_migrations:
+            migration_status = "ok"
+            try:
+                alembic_cfg = AlembicConfig("alembic.ini")
+                from alembic.runtime.migration import MigrationContext
+                from alembic.script import ScriptDirectory
+
+                # Use sync connection from engine for migration check
+                if engine:
+                    sync_engine = engine.sync_engine
+                    with sync_engine.connect() as conn:
+                        migration_ctx = MigrationContext.configure(conn)
+                        current_rev = migration_ctx.get_current_revision()
+
+                    script_dir = ScriptDirectory.from_config(alembic_cfg)
+                    head_rev = script_dir.get_current_head()
+
+                    if current_rev != head_rev:
+                        migration_status = "pending"
+                else:
+                    migration_status = "unknown"
+            except Exception as e:
+                logger.debug(f"Could not check migration status: {e}")
+                migration_status = "unknown"
+
+            response["migrations"] = {"status": migration_status}
+
+        return response
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(
@@ -277,7 +286,6 @@ if __name__ == "__main__":
     config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
     async def shutdown_trigger():
-        """Wait for shutdown signal and trigger graceful shutdown."""
         shutdown_event = asyncio.Event()
 
         def signal_handler(signum, frame):
@@ -292,7 +300,6 @@ if __name__ == "__main__":
         await shutdown_event.wait()
 
     async def serve_with_graceful_shutdown():
-        """Serve the application with graceful shutdown handling."""
         try:
             await hypercorn.asyncio.serve(
                 app, config, shutdown_trigger=shutdown_trigger

@@ -63,8 +63,8 @@ def init_database():
             engine = create_async_engine(
                 async_db_url,
                 echo=False,  # Set to True for debugging
-                pool_size=20,
-                max_overflow=0,
+                pool_size=10,
+                max_overflow=5,
                 pool_pre_ping=True,
                 pool_recycle=300,  # 5 minutes
                 connect_args={
