@@ -42,10 +42,15 @@ RATE_LIMIT_BURST = int(os.getenv("SMS_RATE_LIMIT_BURST", "10"))  # burst allowan
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
 MAX_UNICODE_LENGTH = 70  # Unicode SMS character limit
 
-# GSM-7 basic character set (strict - no accented characters)
+# Complete GSM-7 character set (basic + extended characters)
 GSM7_BASIC = (
-    "@£$¥\n\r\u0020!\"#¤%&'()*+,-./0123456789:;<=>?"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    # Basic GSM-7 characters (0x00-0x7F) - complete standard set
+    "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ"
+    " !\"#¤%&'()*+,-./0123456789:;<=>?"
+    "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§"
+    "¿abcdefghijklmnopqrstuvwxyzäöñüà"
+    # Extended GSM-7 characters (accessible via ESC 0x1B)
+    "|^€{}[]~\\"
 )
 
 # Redis connection pool

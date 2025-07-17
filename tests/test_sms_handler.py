@@ -32,11 +32,19 @@ def mock_redis():
 
 @pytest.fixture
 def mock_sinch_client():
-    with patch("src.sms_handler.get_sinch_client") as mock_get_client:
-        mock_client = AsyncMock()
-        mock_client.send_sms = AsyncMock()
-        mock_get_client.return_value = mock_client
-        yield mock_client
+    """Mock Sinch client using dependency injection."""
+    from src.tools.external.sinch import reset_sinch_client, set_sinch_client
+
+    mock_client = AsyncMock()
+    mock_client.send_sms = AsyncMock()
+
+    # Set the mock client using dependency injection
+    set_sinch_client(mock_client)
+
+    yield mock_client
+
+    # Clean up after test
+    reset_sinch_client()
 
 
 @pytest.fixture
@@ -268,91 +276,99 @@ class TestSMSWebhook:
 
 
 class TestBackgroundTask:
+    @pytest.fixture
+    def setup_mocks(self):
+        """Set up all mocks for process_incoming_sms test."""
+        with (
+            patch("src.sms_handler.get_db_session") as mock_get_db_session,
+            patch("src.sms_handler.get_customer_by_phone") as mock_get_customer,
+            patch("src.sms_handler.create_customer") as mock_create_customer,
+            patch("src.sms_handler.get_active_conversation") as mock_get_conversation,
+            patch("src.sms_handler.create_conversation") as mock_create_conversation,
+            patch("src.sms_handler.add_message") as mock_add_message,
+            patch("src.sms_handler.get_conversation_messages") as mock_get_messages,
+            patch("src.sms_handler.generate_ai_response") as mock_ai_response,
+        ):
+            mock_db = AsyncMock()
+
+            # Mock the async context manager
+            mock_get_db_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_db
+            )
+            mock_get_db_session.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            mock_customer = AsyncMock()
+            mock_customer.id = "customer-123"
+            mock_get_customer.return_value = None
+            mock_create_customer.return_value = mock_customer
+
+            mock_conversation = AsyncMock()
+            mock_conversation.id = "conversation-123"
+            mock_get_conversation.return_value = None
+            mock_create_conversation.return_value = mock_conversation
+
+            mock_get_messages.return_value = []
+            mock_ai_response.return_value = "Here's a great sci-fi book recommendation!"
+
+            yield (
+                mock_get_db_session,
+                mock_get_customer,
+                mock_create_customer,
+                mock_get_conversation,
+                mock_create_conversation,
+                mock_add_message,
+                mock_get_messages,
+                mock_ai_response,
+            )
+
     @pytest.mark.asyncio
-    async def test_process_incoming_sms(self, mock_sinch_client):
-        # Mock database and AI dependencies
-        with patch("src.sms_handler.get_db_session") as mock_get_db_session:
-            with patch("src.sms_handler.get_customer_by_phone") as mock_get_customer:
-                with patch("src.sms_handler.create_customer") as mock_create_customer:
-                    with patch(
-                        "src.sms_handler.get_active_conversation"
-                    ) as mock_get_conversation:
-                        with patch(
-                            "src.sms_handler.create_conversation"
-                        ) as mock_create_conversation:
-                            with patch(
-                                "src.sms_handler.add_message"
-                            ) as mock_add_message:
-                                with patch(
-                                    "src.sms_handler.get_conversation_messages"
-                                ) as mock_get_messages:
-                                    with patch(
-                                        "src.sms_handler.generate_ai_response"
-                                    ) as mock_ai_response:
-                                        mock_db = AsyncMock()
+    async def test_process_incoming_sms(self, mock_sinch_client, setup_mocks):
+        (
+            mock_get_db_session,
+            mock_get_customer,
+            mock_create_customer,
+            mock_get_conversation,
+            mock_create_conversation,
+            mock_add_message,
+            mock_get_messages,
+            mock_ai_response,
+        ) = setup_mocks
 
-                                        # Mock the async context manager
-                                        mock_get_db_session.return_value.__aenter__ = (
-                                            AsyncMock(return_value=mock_db)
-                                        )
-                                        mock_get_db_session.return_value.__aexit__ = (
-                                            AsyncMock(return_value=None)
-                                        )
+        payload = SinchSMSWebhookPayload.model_validate(
+            {
+                "id": "test-id",
+                "type": "mo_text",
+                "from": {
+                    "type": "number",
+                    "endpoint": "+12125551234",
+                },
+                "to": {
+                    "type": "number",
+                    "endpoint": "+19876543210",
+                },
+                "message": "Hello, Marty!",
+                "received_at": "2024-07-17T00:00:00Z",
+            }
+        )
 
-                                        mock_customer = AsyncMock()
-                                        mock_customer.id = "customer-123"
-                                        mock_get_customer.return_value = None
-                                        mock_create_customer.return_value = (
-                                            mock_customer
-                                        )
+        # Import the function within the test to ensure proper patching
+        from src.sms_handler import process_incoming_sms
 
-                                        mock_conversation = AsyncMock()
-                                        mock_conversation.id = "conversation-123"
-                                        mock_get_conversation.return_value = None
-                                        mock_create_conversation.return_value = (
-                                            mock_conversation
-                                        )
+        await process_incoming_sms(payload)
 
-                                        mock_get_messages.return_value = []
-                                        mock_ai_response.return_value = (
-                                            "Here's a great sci-fi book recommendation!"
-                                        )
+        # Verify AI response was generated
+        mock_ai_response.assert_called_once()
 
-                                        payload = SinchSMSWebhookPayload.model_validate(
-                                            {
-                                                "id": "test-id",
-                                                "type": "mo_text",
-                                                "from": {
-                                                    "type": "number",
-                                                    "endpoint": "+12125551234",
-                                                },
-                                                "to": {
-                                                    "type": "number",
-                                                    "endpoint": "+19876543210",
-                                                },
-                                                "message": "Hello, Marty!",
-                                                "received_at": "2024-07-17T00:00:00Z",
-                                            }
-                                        )
+        # Verify database operations were called
+        mock_add_message.assert_called()  # Called twice: once for incoming, once for outgoing
+        assert mock_add_message.call_count == 2
 
-                                        # Import the function within the test to ensure proper patching
-                                        from src.sms_handler import process_incoming_sms
-
-                                        await process_incoming_sms(payload)
-
-                                        # Verify AI response was generated
-                                        mock_ai_response.assert_called_once()
-
-                                        # Verify database operations were called
-                                        mock_add_message.assert_called()  # Called twice: once for incoming, once for outgoing
-                                        assert mock_add_message.call_count == 2
-
-                                        # Verify SMS was sent with AI response
-                                        mock_sinch_client.send_sms.assert_called_once_with(
-                                            body="Here's a great sci-fi book recommendation!",
-                                            to=["+12125551234"],
-                                            from_="+19876543210",
-                                        )
+        # Verify SMS was sent with AI response
+        mock_sinch_client.send_sms.assert_called_once_with(
+            body="Here's a great sci-fi book recommendation!",
+            to=["+12125551234"],
+            from_="+19876543210",
+        )
 
 
 class TestPydanticModels:

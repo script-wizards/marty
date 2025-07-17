@@ -7,14 +7,15 @@ from src.sms_handler import MAX_SMS_LENGTH, gsm7_safe, is_gsm7, split_response_f
     "text,expected",
     [
         ("hello, this is marty.", True),
-        ("café", False),  # 'é' is not GSM-7
+        ("café", True),  # é is GSM-7
         ("hi 👋", False),  # emoji
         ("1234567890!@#?", True),
-        ("smart quotes: “hello”", False),
-        ("ümlaut ü", False),  # ü is not GSM-7
-        ("accented à", False),  # à is not GSM-7
-        ("greek Δ", False),  # Δ is not GSM-7
+        ("smart quotes: \u201chello\u201d", False),  # curly quotes are not GSM-7
+        ("ümlaut ü", True),  # ü is GSM-7
+        ("accented à", True),  # à is GSM-7
+        ("greek Δ", True),  # Δ is GSM-7
         ("chinese 汉字", False),
+        ("{}[]|~^€", True),  # extended GSM-7 chars
     ],
 )
 def test_is_gsm7(text, expected):
@@ -25,13 +26,14 @@ def test_is_gsm7(text, expected):
     "text,expected",
     [
         ("hello, this is marty.", "hello, this is marty."),
-        ("café", "caf?"),
+        ("café", "café"),  # é is GSM-7, no replacement needed
         ("hi 👋", "hi ?"),
-        ("smart quotes: “hello”", "smart quotes: ?hello?"),
-        ("ümlaut ü", "?mlaut ?"),
-        ("accented à", "accented ?"),
-        ("greek Δ", "greek ?"),
+        ("smart quotes: \u201chello\u201d", "smart quotes: ?hello?"),
+        ("ümlaut ü", "ümlaut ü"),  # ü is GSM-7, no replacement needed
+        ("accented à", "accented à"),  # à is GSM-7, no replacement needed
+        ("greek Δ", "greek Δ"),  # Δ is GSM-7, no replacement needed
         ("chinese 汉字", "chinese ??"),
+        ("{}[]|~^€", "{}[]|~^€"),  # extended GSM-7 chars, no replacement needed
     ],
 )
 def test_gsm7_safe(text, expected):

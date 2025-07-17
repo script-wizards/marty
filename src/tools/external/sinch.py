@@ -211,16 +211,6 @@ def get_sinch_client() -> SinchClient:
     global _sinch_client
 
     if _sinch_client is None:
-        # Allow testing without configuration
-        import os
-
-        if os.getenv("TESTING") == "true":
-            from unittest.mock import MagicMock
-
-            mock_client = MagicMock(spec=SinchClient)
-            mock_client.send_sms.return_value = {"id": "test_id", "status": "sent"}
-            return mock_client
-
         if not all([config.SINCH_API_TOKEN, config.SINCH_SERVICE_PLAN_ID]):
             raise RuntimeError(
                 "Sinch configuration missing: SINCH_API_TOKEN and SINCH_SERVICE_PLAN_ID must be set."
@@ -233,6 +223,12 @@ def get_sinch_client() -> SinchClient:
         )
 
     return _sinch_client  # type: ignore[return-value]
+
+
+def set_sinch_client(client: SinchClient) -> None:
+    """Set the Sinch client singleton. Useful for testing with dependency injection."""
+    global _sinch_client
+    _sinch_client = client
 
 
 def reset_sinch_client() -> None:
