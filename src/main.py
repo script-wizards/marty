@@ -2,12 +2,15 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
+import structlog
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic.config import Config as AlembicConfig
 from src.ai_client import ConversationMessage, generate_ai_response
 from src.database import (
     ConversationCreate,
@@ -17,6 +20,7 @@ from src.database import (
     close_db,
     create_conversation,
     create_customer,
+    engine,
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
@@ -24,30 +28,88 @@ from src.database import (
     init_db,
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def rename_event_to_message(logger, method_name, event_dict):
+    """Rename 'event' field to 'message' for Railway compatibility."""
+    if "event" in event_dict:
+        event_dict["message"] = event_dict.pop("event")
+    return event_dict
+
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.format_exc_info,
+        rename_event_to_message,
+        structlog.processors.JSONRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
+
+# Configure standard logging to work with structlog
+logging.basicConfig(
+    format="%(message)s",
+    level=logging.INFO,
+)
+
+logger = structlog.get_logger(__name__)
+
+
+def validate_environment_variables() -> None:
+    """Validate required environment variables on startup."""
+    required_vars = [
+        "ANTHROPIC_API_KEY",
+        "HARDCOVER_API_TOKEN",
+    ]
+
+    missing_vars = []
+    for var in required_vars:
+        if not os.getenv(var):
+            missing_vars.append(var)
+
+    if missing_vars:
+        raise ValueError(
+            f"Missing required environment variables: {', '.join(missing_vars)}"
+        )
+
+    logger.info(f"Environment: {os.getenv('ENV', 'development')}")
+    logger.info(f"Database URL configured: {bool(os.getenv('DATABASE_URL'))}")
+    logger.info(f"Anthropic API key configured: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
+    logger.info(
+        f"Hardcover API key configured: {bool(os.getenv('HARDCOVER_API_TOKEN'))}"
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan (startup and shutdown)."""
-    # Startup
     try:
+        validate_environment_variables()
+        logger.info("Environment variables validated")
+
         await init_db()
         logger.info("Database initialized successfully")
+
+        logger.info("Marty chatbot started successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"Failed to initialize application: {e}")
         raise
 
     yield
 
-    # Shutdown
     try:
+        logger.info("Shutting down Marty chatbot...")
+
         await close_db()
-        logger.info("Database connections closed")
+
+        logger.info("Marty chatbot shutdown complete")
     except Exception as e:
-        logger.error(f"Error closing database connections: {e}")
+        logger.error(f"Error during shutdown: {e}")
+        # Don't raise during shutdown to allow graceful termination
 
 
 app = FastAPI(
@@ -59,24 +121,64 @@ app = FastAPI(
 
 
 @app.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    """Enhanced health check endpoint with database connectivity."""
+async def health_check(
+    db: AsyncSession = Depends(get_db), include_migrations: bool = False
+):
+    """Enhanced health check endpoint with database connectivity.
+
+    Args:
+        include_migrations: Whether to include migration status check (default: False)
+                           Can be enabled with ?include_migrations=true
+    """
     try:
-        # Test database connectivity
         result = await db.execute(text("SELECT 1"))
         db_status = "ok" if result.fetchone() else "error"
 
-        # Get database URL info (without credentials)
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
-        db_type = db_url.split("://")[0].split("+")[0] if "://" in db_url else "unknown"
+        try:
+            parsed_url = urlparse(db_url)
+            db_type = (
+                parsed_url.scheme.split("+")[0] if parsed_url.scheme else "unknown"
+            )
+        except Exception:
+            db_type = "unknown"
 
-        return {
+        response = {
             "status": "ok",
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
             "environment": os.getenv("ENV", "development"),
         }
+
+        if include_migrations:
+            migration_status = "ok"
+            try:
+                alembic_cfg = AlembicConfig("alembic.ini")
+                from alembic.runtime.migration import MigrationContext
+                from alembic.script import ScriptDirectory
+
+                # Use sync connection from engine for migration check
+                if engine:
+                    sync_engine = engine.sync_engine
+                    with sync_engine.connect() as conn:
+                        migration_ctx = MigrationContext.configure(conn)
+                        current_rev = migration_ctx.get_current_revision()
+
+                    script_dir = ScriptDirectory.from_config(alembic_cfg)
+                    head_rev = script_dir.get_current_head()
+
+                    if current_rev != head_rev:
+                        migration_status = "pending"
+                else:
+                    migration_status = "unknown"
+            except Exception as e:
+                logger.debug(f"Could not check migration status: {e}")
+                migration_status = "unknown"
+
+            response["migrations"] = {"status": migration_status}
+
+        return response
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(
@@ -90,7 +192,6 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         ) from e
 
 
-# Chat endpoint with Claude integration
 class ChatRequest(BaseModel):
     message: str
     phone: str
@@ -106,7 +207,6 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat endpoint with Claude AI integration."""
     try:
-        # Get or create customer
         customer = await get_customer_by_phone(db, request.phone)
         if not customer:
             customer_data = CustomerCreate(
@@ -117,7 +217,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             customer = await create_customer(db, customer_data)
 
-        # Get or create active conversation
         conversation = await get_active_conversation(db, request.phone)
         if not conversation:
             conversation_data = ConversationCreate(
@@ -125,7 +224,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             conversation = await create_conversation(db, conversation_data)
 
-        # Add incoming message
         incoming_message = MessageCreate(
             conversation_id=conversation.id,
             direction="inbound",
@@ -133,7 +231,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         )
         await add_message(db, incoming_message)
 
-        # Get conversation history for context (simple approach using get_conversation_messages)
         messages = await get_conversation_messages(db, conversation.id, limit=10)
         conversation_history = [
             ConversationMessage(
@@ -144,7 +241,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             for msg in reversed(messages)  # Reverse to get chronological order
         ]
 
-        # Generate AI response using Claude
         response_text = await generate_ai_response(
             user_message=request.message,
             conversation_history=conversation_history[
@@ -160,7 +256,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             },
         )
 
-        # Add outgoing message
         outgoing_message = MessageCreate(
             conversation_id=conversation.id, direction="outbound", content=response_text
         )
@@ -178,13 +273,41 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 if __name__ == "__main__":
+    import asyncio
+    import signal
+
     import hypercorn.asyncio
     from hypercorn.config import Config
 
     config = Config()
-    config.bind = ["[::]:8000"]  # Dual stack IPv4/IPv6 binding
-    config.use_reloader = True
+    port = int(os.getenv("PORT", "8000"))
+    config.bind = [f"[::]:{port}"]  # Dual-stack IPv4/IPv6 binding for Railway
+    config.use_reloader = os.getenv("ENV") == "development"
+    config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
-    import asyncio
+    async def shutdown_trigger():
+        shutdown_event = asyncio.Event()
 
-    asyncio.run(hypercorn.asyncio.serve(app, config))  # type: ignore
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+            shutdown_event.set()
+
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, signal_handler)
+        if hasattr(signal, "SIGINT"):
+            signal.signal(signal.SIGINT, signal_handler)
+
+        await shutdown_event.wait()
+
+    async def serve_with_graceful_shutdown():
+        try:
+            await hypercorn.asyncio.serve(
+                app, config, shutdown_trigger=shutdown_trigger
+            )
+        except asyncio.CancelledError:
+            logger.info("Server shutdown cancelled")
+        except Exception as e:
+            logger.error(f"Server error: {e}")
+            raise
+
+    asyncio.run(serve_with_graceful_shutdown())

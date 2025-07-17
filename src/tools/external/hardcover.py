@@ -6,11 +6,11 @@ book details, user recommendations, and trending books functionality.
 """
 
 import asyncio
-import logging
 import time
 from datetime import datetime, timedelta
 from typing import Any
 
+import structlog
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
@@ -18,7 +18,7 @@ from gql.transport.exceptions import TransportError, TransportQueryError
 from src.config import config
 from src.tools.base import BaseTool, ToolResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class HardcoverAPIError(Exception):

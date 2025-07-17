@@ -10,13 +10,13 @@ This tool handles conversation state management including:
 """
 
 import json
-import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 import redis.asyncio as redis
+import structlog
 
 import src.database as database
 from src.database import (
@@ -32,7 +32,7 @@ from src.database import (
 )
 from src.tools.base import BaseTool, ToolResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

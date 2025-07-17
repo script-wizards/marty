@@ -1,13 +1,13 @@
-import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
+import structlog
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # Initialize the Claude client

@@ -1,11 +1,12 @@
 """Base tool interface for all Marty tools."""
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -22,7 +23,7 @@ class BaseTool(ABC):
     """Base class for all tools."""
 
     def __init__(self) -> None:
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = structlog.get_logger(self.__class__.__name__)
 
     @property
     @abstractmethod

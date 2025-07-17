@@ -12,10 +12,12 @@ import asyncio
 import logging
 from typing import Any
 
+import structlog
+
 from src.ai_client import ConversationMessage, generate_ai_response
 from src.tools import tool_registry
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ToolCallingChatProcessor:
