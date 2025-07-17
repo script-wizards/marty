@@ -32,11 +32,8 @@ from src.database import (
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.JSONRenderer(),
     ],
@@ -71,17 +68,17 @@ def validate_environment_variables() -> None:
             f"Missing required environment variables: {', '.join(missing_vars)}"
         )
 
-    # Log configuration (without secrets)
     logger.info(f"Environment: {os.getenv('ENV', 'development')}")
     logger.info(f"Database URL configured: {bool(os.getenv('DATABASE_URL'))}")
     logger.info(f"Anthropic API key configured: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
-    logger.info(f"Hardcover API key configured: {bool(os.getenv('HARDCOVER_API_KEY'))}")
+    logger.info(
+        f"Hardcover API key configured: {bool(os.getenv('HARDCOVER_API_TOKEN'))}"
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan (startup and shutdown)."""
-    # Startup
     try:
         validate_environment_variables()
         logger.info("Environment variables validated")
@@ -96,7 +93,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     try:
         logger.info("Shutting down Marty chatbot...")
 
@@ -121,7 +117,6 @@ app = FastAPI(
 async def health_check(db: AsyncSession = Depends(get_db)):
     """Enhanced health check endpoint with database connectivity."""
     try:
-        # Test database connectivity
         result = await db.execute(text("SELECT 1"))
         db_status = "ok" if result.fetchone() else "error"
 
@@ -181,7 +176,6 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         ) from e
 
 
-# Chat endpoint with Claude integration
 class ChatRequest(BaseModel):
     message: str
     phone: str
@@ -197,7 +191,6 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat endpoint with Claude AI integration."""
     try:
-        # Get or create customer
         customer = await get_customer_by_phone(db, request.phone)
         if not customer:
             customer_data = CustomerCreate(
@@ -208,7 +201,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             customer = await create_customer(db, customer_data)
 
-        # Get or create active conversation
         conversation = await get_active_conversation(db, request.phone)
         if not conversation:
             conversation_data = ConversationCreate(
@@ -216,7 +208,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             conversation = await create_conversation(db, conversation_data)
 
-        # Add incoming message
         incoming_message = MessageCreate(
             conversation_id=conversation.id,
             direction="inbound",
@@ -224,7 +215,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         )
         await add_message(db, incoming_message)
 
-        # Get conversation history for context (simple approach using get_conversation_messages)
         messages = await get_conversation_messages(db, conversation.id, limit=10)
         conversation_history = [
             ConversationMessage(
@@ -235,7 +225,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             for msg in reversed(messages)  # Reverse to get chronological order
         ]
 
-        # Generate AI response using Claude
         response_text = await generate_ai_response(
             user_message=request.message,
             conversation_history=conversation_history[
@@ -251,7 +240,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             },
         )
 
-        # Add outgoing message
         outgoing_message = MessageCreate(
             conversation_id=conversation.id, direction="outbound", content=response_text
         )
@@ -281,6 +269,11 @@ if __name__ == "__main__":
     config.use_reloader = os.getenv("ENV") == "development"
     config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
+    # Suppress Hypercorn startup logs in production (they show as "error" in Railway)
+    if os.getenv("ENV") != "development":
+        config.accesslog = "-"
+        config.errorlog = "-"
+
     async def shutdown_trigger():
         """Wait for shutdown signal and trigger graceful shutdown."""
         shutdown_event = asyncio.Event()
@@ -289,13 +282,11 @@ if __name__ == "__main__":
             logger.info(f"Received signal {signum}, initiating graceful shutdown...")
             shutdown_event.set()
 
-        # Set up signal handlers for graceful shutdown
         if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, signal_handler)
         if hasattr(signal, "SIGINT"):
             signal.signal(signal.SIGINT, signal_handler)
 
-        # Wait for shutdown signal
         await shutdown_event.wait()
 
     async def serve_with_graceful_shutdown():
