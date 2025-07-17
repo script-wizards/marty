@@ -277,11 +277,6 @@ if __name__ == "__main__":
     config.use_reloader = os.getenv("ENV") == "development"
     config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
-    # Suppress Hypercorn startup logs in production (they show as "error" in Railway)
-    if os.getenv("ENV") != "development":
-        config.accesslog = "-"
-        config.errorlog = "-"
-
     async def shutdown_trigger():
         """Wait for shutdown signal and trigger graceful shutdown."""
         shutdown_event = asyncio.Event()
