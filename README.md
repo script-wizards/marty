@@ -1,8 +1,8 @@
-# Marty - AI Bookstore Chatbot
+# Marty - AI Bookstore SMS Chatbot
 
 [![Railway Deployment](https://img.shields.io/badge/Railway-Deployed-brightgreen)](https://railway.com/project/9ae0f484-5538-4866-9757-a6931049b1e9?environmentId=dddc87ce-de5b-4928-8e27-3c40c088ef05)
 
-an ai chatbot that recommends books via text. powered by claude ai.
+an ai chatbot that recommends books via SMS text messages. powered by claude ai.
 
 marty is a burnt-out wizard who used to do software engineering and now works at dungeon books. he's genuinely magical but completely casual about it.
 
@@ -124,7 +124,29 @@ GET /health
 
 returns database connectivity and system status
 
-### Chat Interface
+### SMS Webhook
+```
+POST /webhook/sms
+```
+
+request:
+```json
+{
+  "From": "+1234567890",
+  "Text": "looking for a good fantasy book",
+  "MessageUUID": "unique-id"
+}
+```
+
+response:
+```json
+{
+  "status": "received",
+  "message_id": "uuid"
+}
+```
+
+### Chat Interface (for testing)
 ```
 POST /chat
 ```
@@ -282,6 +304,9 @@ add token as HARDCOVER_API_TOKEN=Bearer your_token
 - ANTHROPIC_API_KEY: claude ai api key
 - HARDCOVER_API_TOKEN: book data api token
 - BOOKSHOP_AFFILIATE_ID: optional affiliate links
+- SINCH_API_TOKEN: sinch api authentication token
+- SINCH_SERVICE_PLAN_ID: sinch service plan identifier
+- SINCH_WEBHOOK_SECRET: webhook signature verification
 - DEBUG: true/false
 - LOG_LEVEL: INFO/DEBUG
 
@@ -322,7 +347,8 @@ implemented:
 - terminal chat interface
 
 in development:
-- sms webhook handler
+- sms webhook handler for receiving text messages
+- sms provider integration for sending responses
 - square api for payments
 - redis caching layer
 - rate limiting

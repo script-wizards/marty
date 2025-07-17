@@ -163,7 +163,7 @@ class Message(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    # SMS/RCS metadata
+    # SMS metadata
     message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="pending"

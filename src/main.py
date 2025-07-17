@@ -113,7 +113,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Marty - Dungeon Books RCS Wizard",
+    title="Marty - Dungeon Books SMS Wizard",
     version="0.1.0",
     description="AI-powered SMS chatbot for book recommendations and purchases",
     lifespan=lifespan,

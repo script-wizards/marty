@@ -57,7 +57,7 @@ class BookEnricherTool(BaseTool):
     1. Extract book mentions using Claude AI
     2. Validate books against Hardcover API
     3. Store validated books in database
-    4. Prepare data for RCS cards and recommendations
+    4. Prepare data for SMS cards and recommendations
     """
 
     def __init__(self, hardcover_tool: HardcoverTool | None = None):

@@ -1,4 +1,4 @@
-## Project Blueprint: Dungeon Books RCS Wizard
+## Project Blueprint: Dungeon Books SMS Wizard
 
 ### Phase 1: Core Infrastructure Setup
 
@@ -30,7 +30,7 @@
 
 ### Phase 2: External Service Integration
 
-4. **SMS/RCS Provider Integration**
+4. **SMS Provider Integration**
 
     - Webhook signature verification
     - Message parsing with Pydantic
@@ -106,7 +106,7 @@
 - 3.2 HMAC signature verification middleware
 - 3.3 Background task queue with FastAPI
 - 3.4 Redis for message queueing
-- 3.5 Mock SMS provider for testing
+- 3.5 Mock Sinch API for testing
 
 ### Step 4: Customer Service
 
@@ -228,15 +228,16 @@ Requirements:
 4. Use FastAPI background tasks for non-blocking message processing
 5. Integrate with Redis for message queuing and rate limiting
 6. Create comprehensive Pydantic models for:
-   - Webhook payloads
+   - Webhook payloads (generic SMS format)
    - Message validation
    - Response formats
 7. Add structured logging with correlation IDs
 8. Implement rate limiting with Redis sliding windows
-9. Create mock SMS provider for testing
-10. Use pytest and pytest-asyncio for comprehensive testing
-11. Environment variables: SMOBI_WEBHOOK_SECRET, REDIS_URL
-12. Add proper OpenTelemetry tracing
+9. Create Sinch SMS client with proper API integration
+10. Create mock Sinch API for testing
+11. Use pytest and pytest-asyncio for comprehensive testing
+12. Environment variables: SINCH_API_TOKEN, SINCH_SERVICE_PLAN_ID, SINCH_WEBHOOK_SECRET, REDIS_URL
+13. Add proper OpenTelemetry tracing
 
 Build on the existing FastAPI app with database integration.
 ```

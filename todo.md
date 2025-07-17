@@ -1,4 +1,4 @@
-# Dungeon Books RCS Wizard - Implementation Checklist
+# Dungeon Books SMS Wizard - Implementation Checklist
 
 ## Initial Setup
 
@@ -22,7 +22,9 @@
 - [x] Get Hardcover API key
 - [x] Register with Anthropic for Claude API
 - [x] Get Claude API key
-- [x] Schedule meeting with Smobi representative
+- [ ] Set up Sinch account and get credentials
+- [ ] Configure Sinch webhook URL
+- [ ] Get Sinch API Token and Service Plan ID
 - [x] Set up Bookshop.org affiliate account
 - [x] Create Railway account
 
@@ -151,7 +153,7 @@
 - [ ] Test with valid signatures
 - [ ] Test with invalid signatures
 - [ ] Handle missing signature header
-- [ ] Add IP allowlist if provided by Smobi
+- [ ] Add IP allowlist if provided by SMS provider
 - [ ] Add request validation with Pydantic
 
 ### Message Processing
@@ -171,9 +173,11 @@
 - [ ] Clean up old rate limit records automatically
 - [ ] Test rate limiting logic with Redis
 
-### Mock SMS Provider
+### SMS Provider Integration
 
-- [ ] Create mock response function
+- [ ] Choose SMS provider (Sinch selected)
+- [ ] Implement Sinch SMS sending client
+- [ ] Create mock Sinch response function for testing
 - [ ] Log outgoing messages with structured logging
 - [ ] Simulate SMS sending with delays
 - [ ] Add response delay simulation
@@ -579,7 +583,7 @@
 
 ### External Service Config
 
-- [ ] Configure Smobi webhook URL
+- [ ] Configure SMS provider webhook URL
 - [ ] Test SMS sending/receiving
 - [ ] Verify Square integration
 - [ ] Test Hardcover API
