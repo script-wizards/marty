@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import time
 from typing import Any
 
 import httpx
@@ -120,8 +121,6 @@ def verify_sinch_signature(
     Returns:
         True if signature is valid and timestamp is recent, False otherwise
     """
-    import time
-
     # Verify signature first
     if not _verify_sinch_signature(request_body, signature, secret):
         return False

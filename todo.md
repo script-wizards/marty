@@ -189,6 +189,8 @@
 - [x] Implement multi-message SMS splitting for natural conversation flow
 - [x] Add message delays between SMS sends for realistic texting
 - [x] Track sent messages in Redis
+- [ ] Consider parallel SMS sending for better performance while maintaining careful rate limiting
+- [ ] Add retry logic for failed SMS sends with exponential backoff
 
 ### Webhook Testing
 
@@ -401,6 +403,8 @@
 - [x] Log all API calls with structured logging
 - [x] Track token usage with metrics
 - [x] Add response caching with Redis
+- [ ] Add circuit breaker pattern for external API calls (Sinch, AI responses) to improve resilience
+- [x] Add comprehensive error handling for all edge cases with personality-driven responses
 
 ### AI Testing
 
@@ -445,6 +449,7 @@
 - [x] Remove special formatting for SMS compatibility
 - [x] Handle multi-message responses properly
 - [x] Test message splitting with various content types
+- [ ] Improve error message localization for international users
 
 ### Personality Testing
 
@@ -526,6 +531,7 @@
 - [ ] Track error rates with alerting thresholds
 - [ ] Create metric dashboards with visualization
 - [ ] Add distributed tracing for end-to-end visibility
+- [ ] Add circuit breaker monitoring and metrics for external service health
 
 ### Performance
 
