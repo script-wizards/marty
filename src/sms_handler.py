@@ -37,6 +37,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 RATE_LIMIT = int(os.getenv("SMS_RATE_LIMIT", "5"))  # messages per window
 RATE_LIMIT_WINDOW = int(os.getenv("SMS_RATE_LIMIT_WINDOW", "60"))  # seconds
 RATE_LIMIT_BURST = int(os.getenv("SMS_RATE_LIMIT_BURST", "10"))  # burst allowance
+RATE_LIMIT_BURST_WINDOW = int(
+    os.getenv("SMS_RATE_LIMIT_BURST_WINDOW", "3600")
+)  # burst window in seconds
 
 # SMS configuration
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
@@ -230,7 +233,9 @@ async def rate_limit(phone: str, redis) -> None:
     burst_key = f"sms:burst:{phone}"
     burst_count = await redis.incr(burst_key)
     if burst_count == 1:
-        await redis.expire(burst_key, 3600)  # 1 hour window for burst
+        await redis.expire(
+            burst_key, RATE_LIMIT_BURST_WINDOW
+        )  # configurable burst window
 
     # Check limits
     if count > RATE_LIMIT:
