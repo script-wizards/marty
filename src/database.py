@@ -555,7 +555,7 @@ async def close_db():
     """Close database connections."""
     if engine is not None:
         await engine.dispose()
-        print("✅ Database connections closed")
+        logger.info("Database connections closed")
 
 
 # Supabase-specific utilities

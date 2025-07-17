@@ -105,7 +105,6 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down Marty chatbot...")
 
         await close_db()
-        logger.info("Database connections closed")
 
         logger.info("Marty chatbot shutdown complete")
     except Exception as e:
