@@ -2,12 +2,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic.config import Config as AlembicConfig
 from src.ai_client import ConversationMessage, generate_ai_response
 from src.database import (
     ConversationCreate,
@@ -66,15 +68,42 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         result = await db.execute(text("SELECT 1"))
         db_status = "ok" if result.fetchone() else "error"
 
-        # Get database URL info (without credentials)
+        # Parse database type from URL
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./marty.db")
-        db_type = db_url.split("://")[0].split("+")[0] if "://" in db_url else "unknown"
+        try:
+            parsed_url = urlparse(db_url)
+            db_type = (
+                parsed_url.scheme.split("+")[0] if parsed_url.scheme else "unknown"
+            )
+        except Exception:
+            db_type = "unknown"
+
+        # Check migration status
+        migration_status = "ok"
+        try:
+            alembic_cfg = AlembicConfig("alembic.ini")
+            from alembic.runtime.migration import MigrationContext
+            from alembic.script import ScriptDirectory
+
+            async with db.begin():
+                migration_ctx = MigrationContext.configure(db.connection())
+                current_rev = migration_ctx.get_current_revision()
+
+            script_dir = ScriptDirectory.from_config(alembic_cfg)
+            head_rev = script_dir.get_current_head()
+
+            if current_rev != head_rev:
+                migration_status = "pending"
+        except Exception as e:
+            logger.warning(f"Could not check migration status: {e}")
+            migration_status = "unknown"
 
         return {
             "status": "ok",
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
+            "migrations": {"status": migration_status},
             "environment": os.getenv("ENV", "development"),
         }
     except Exception as e:
