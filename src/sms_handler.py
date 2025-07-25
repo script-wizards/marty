@@ -8,7 +8,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    Header,
     HTTPException,
     Request,
     status,
@@ -376,8 +375,6 @@ SINCH_WEBHOOK_PASSWORD = os.getenv("SINCH_WEBHOOK_PASSWORD")
 async def sms_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    x_sinch_signature: str = Header(None),
-    x_sinch_timestamp: str = Header(None, alias="X-Sinch-Timestamp"),
     redis=Depends(get_redis),
     credentials: HTTPBasicCredentials = Depends(security),
 ) -> SinchSMSResponse:
