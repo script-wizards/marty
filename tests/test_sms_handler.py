@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import time
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -216,7 +217,7 @@ class TestRateLimiting:
         mock_redis.incr.return_value = 6  # Exceeds limit of 5
         with pytest.raises(HTTPException) as exc_info:
             await rate_limit("+12125551234", mock_redis)
-        exception = exc_info.value
+        exception = cast(HTTPException, exc_info.value)
         assert exception.status_code == 429
         assert "whoa slow down there, give me a sec to catch up" in str(
             exception.detail
@@ -240,7 +241,7 @@ class TestRateLimiting:
         ]  # rate=3 (OK), burst=11 (exceeds limit of 10)
         with pytest.raises(HTTPException) as exc_info:
             await rate_limit("+12125551234", mock_redis)
-        exception = exc_info.value
+        exception = cast(HTTPException, exc_info.value)
         assert exception.status_code == 429
         assert "whoa slow down there, give me a sec to catch up" in str(
             exception.detail
@@ -564,9 +565,10 @@ class TestRedisIntegration:
         with pytest.raises(HTTPException) as exc_info:
             await rate_limit(phone, test_redis)
 
-        assert exc_info.value.status_code == 429
+        exception = cast(HTTPException, exc_info.value)
+        assert exception.status_code == 429
         assert "whoa slow down there, give me a sec to catch up" in str(
-            exc_info.value.detail
+            exception.detail
         )
 
         # Verify rate limit key exists and has correct value
