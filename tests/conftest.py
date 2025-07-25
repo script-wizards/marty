@@ -51,10 +51,11 @@ POSTGRES_URL = "postgresql+asyncpg://marty_test:password@localhost:5432/marty_te
 pg_engine = create_async_engine(
     POSTGRES_URL,
     echo=False,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,
+    max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_reset_on_return="commit",
 )
 PgSessionLocal = async_sessionmaker(
     pg_engine, class_=AsyncSession, expire_on_commit=False
@@ -66,11 +67,29 @@ async def get_pg_db():
         yield session
 
 
-@pytest_asyncio.fixture(scope="class")
+@pytest_asyncio.fixture(scope="function")
 async def use_postgres_db(request):
+    # Create a fresh engine for this test to ensure complete isolation
+    test_engine = create_async_engine(
+        POSTGRES_URL,
+        echo=False,
+        pool_size=3,
+        max_overflow=5,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_reset_on_return="commit",
+    )
+    TestSessionLocal = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async def get_test_pg_db():
+        async with TestSessionLocal() as session:
+            yield session
+
     # Save the original overrides
     original_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = get_pg_db
+    app.dependency_overrides[get_db] = get_test_pg_db
 
     # Monkey patch get_db_session function directly
     from contextlib import asynccontextmanager
@@ -82,7 +101,7 @@ async def use_postgres_db(request):
     @asynccontextmanager
     async def test_get_db_session():
         # Create a fresh session for each call with proper isolation
-        async with PgSessionLocal() as session:
+        async with TestSessionLocal() as session:
             try:
                 yield session
             except Exception:
@@ -94,14 +113,17 @@ async def use_postgres_db(request):
     src.database.get_db_session = test_get_db_session
 
     # Create tables
-    async with pg_engine.begin() as conn:
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    yield
+    yield TestSessionLocal, test_engine
 
     # Drop tables
-    async with pg_engine.begin() as conn:
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+    # Dispose of the test engine
+    await test_engine.dispose()
 
     # Restore the original overrides
     if original_override is not None:
@@ -114,23 +136,36 @@ async def use_postgres_db(request):
 
 
 @pytest_asyncio.fixture
-async def clean_postgres_db():
+async def clean_postgres_db(use_postgres_db):
     """Clean Postgres database between tests when using Postgres."""
-    # Only run if we're using Postgres
-    if app.dependency_overrides.get(get_db) == get_pg_db:
-        # Clean all tables between tests
-        async with pg_engine.begin() as conn:
-            # Disable foreign key checks temporarily
-            await conn.execute(text("SET session_replication_role = replica;"))
+    # Get the test engine from the use_postgres_db fixture
+    test_session_local, test_engine = use_postgres_db
 
-            # Delete all data from all tables
-            for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(table.delete())
+    # Clean all tables before the test
+    async with test_engine.begin() as conn:
+        # Disable foreign key checks temporarily
+        await conn.execute(text("SET session_replication_role = replica;"))
 
-            # Re-enable foreign key checks
-            await conn.execute(text("SET session_replication_role = DEFAULT;"))
+        # Delete all data from all tables
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
 
-        yield
+        # Re-enable foreign key checks
+        await conn.execute(text("SET session_replication_role = DEFAULT;"))
+
+    yield
+
+    # Clean all tables after the test as well
+    async with test_engine.begin() as conn:
+        # Disable foreign key checks temporarily
+        await conn.execute(text("SET session_replication_role = replica;"))
+
+        # Delete all data from all tables
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
+
+        # Re-enable foreign key checks
+        await conn.execute(text("SET session_replication_role = DEFAULT;"))
 
 
 @pytest.fixture(autouse=True)
@@ -206,7 +241,9 @@ def initialize_database_for_integration(request):
     if request.config.getoption("-m") and "integration" in request.config.getoption(
         "-m"
     ):
+
         async def init_db():
             async for _ in get_db():
                 break
+
         asyncio.run(init_db())

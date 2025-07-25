@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from src.main import app
@@ -27,6 +28,9 @@ client = TestClient(app)
 def mock_redis():
     with patch("src.sms_handler.redis.from_url") as mock:
         redis_mock = AsyncMock()
+        # Default behavior - can be overridden in individual tests
+        redis_mock.incr.return_value = 1
+        redis_mock.expire = AsyncMock()
         mock.return_value = redis_mock
         yield redis_mock
 
@@ -58,6 +62,34 @@ def valid_webhook_payload():
         "message": "Hello, Marty!",
         "received_at": "2024-07-17T00:00:00Z",
     }
+
+
+@pytest.fixture
+def unique_webhook_payload():
+    """Create unique payloads for each test to avoid rate limiting conflicts."""
+    import uuid
+
+    phone_number = f"+1212555{str(uuid.uuid4().int)[:4]}"
+    return {
+        "id": f"test-id-{uuid.uuid4()}",
+        "type": "mo_text",
+        "from": {"type": "number", "endpoint": phone_number},
+        "to": {"type": "number", "endpoint": "+19876543210"},
+        "message": "Hello, Marty!",
+        "received_at": "2024-07-17T00:00:00Z",
+    }
+
+
+@pytest.fixture
+def mock_redis_reset():
+    """Mock Redis that always returns 1 for incr calls - used for integration tests."""
+    with patch("src.sms_handler.redis.from_url") as mock:
+        redis_mock = AsyncMock()
+        # Always return 1 for each incr call to simulate fresh Redis state
+        redis_mock.incr.side_effect = lambda key: 1
+        redis_mock.expire = AsyncMock()
+        mock.return_value = redis_mock
+        yield redis_mock
 
 
 @pytest.fixture
@@ -136,7 +168,7 @@ class TestSignatureVerification:
             payload_str.encode(), signature, webhook_secret, current_time
         )
 
-    def test_verify_sinch_signature_wrong_secret(self):
+    def test_verify_sinch_signature_wrong_secret(self, webhook_secret):
         payload = {"test": "data"}
         payload_str = json.dumps(payload)
         signature = create_signature(payload_str, "wrong-secret")
@@ -169,8 +201,6 @@ class TestSignatureVerification:
 class TestRateLimiting:
     @pytest.mark.asyncio
     async def test_rate_limit_first_message(self, mock_redis):
-        mock_redis.incr.return_value = 1
-        mock_redis.expire = AsyncMock()
         await rate_limit("+12125551234", mock_redis)
         # Should call incr twice: once for rate limit, once for burst protection
         assert mock_redis.incr.call_count == 2
@@ -244,22 +274,29 @@ class TestSMSWebhook:
         {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
     )
     @pytest.mark.integration
-    def test_webhook_valid_auth(
-        self, valid_webhook_payload, mock_redis, mock_sinch_client
+    @pytest.mark.asyncio
+    async def test_webhook_valid_auth(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+        use_postgres_db,
+        clean_postgres_db,
     ):
-        # Reload the module to pick up new env vars
+        TestSessionLocal, test_engine = use_postgres_db
         import importlib
 
         import src.sms_handler
 
         importlib.reload(src.sms_handler)
-
         headers = self._auth_header("testuser", "testpass")
-        mock_redis.incr.return_value = 1
-        mock_redis.expire = AsyncMock()
-        response = client.post(
-            "/webhook/sms", json=valid_webhook_payload, headers=headers
-        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/webhook/sms", json=unique_webhook_payload, headers=headers
+            )
         assert response.status_code == 200
         assert response.json()["message"] == "Inbound message received"
 
@@ -283,6 +320,94 @@ class TestSMSWebhook:
                 "/webhook/sms", json=invalid_payload, headers=headers
             )
             assert response.status_code == 400
+
+    @patch.dict(
+        os.environ,
+        {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
+    )
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_webhook_stop_opt_out(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+        use_postgres_db,
+        clean_postgres_db,
+    ):
+        TestSessionLocal, test_engine = use_postgres_db
+        import importlib
+
+        import src.sms_handler
+        from src.database import get_customer_by_phone
+
+        importlib.reload(src.sms_handler)
+        headers = self._auth_header("testuser", "testpass")
+        stop_payload = unique_webhook_payload.copy()
+        stop_payload["message"] = "STOP"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post("/webhook/sms", json=stop_payload, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["message"] == "Opt-out confirmation sent"
+        mock_sinch_client.send_sms.assert_awaited_with(
+            body="Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help.",
+            to=[stop_payload["from"]["endpoint"]],
+            from_=stop_payload["to"]["endpoint"],
+        )
+
+        # Check DB for opted_out - use the test database session directly
+        async with TestSessionLocal() as db:
+            customer = await get_customer_by_phone(db, stop_payload["from"]["endpoint"])
+            assert customer is not None
+            assert customer.opted_out is True
+
+    @patch.dict(
+        os.environ,
+        {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
+    )
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_webhook_help_message(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+        use_postgres_db,
+        clean_postgres_db,
+    ):
+        TestSessionLocal, test_engine = use_postgres_db
+        import importlib
+
+        import src.sms_handler
+        from src.database import get_customer_by_phone
+
+        importlib.reload(src.sms_handler)
+        headers = self._auth_header("testuser", "testpass")
+        help_payload = unique_webhook_payload.copy()
+        help_payload["message"] = "HELP"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post("/webhook/sms", json=help_payload, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["message"] == "Help message sent"
+        mock_sinch_client.send_sms.assert_awaited_with(
+            body="Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply.",
+            to=[help_payload["from"]["endpoint"]],
+            from_=help_payload["to"]["endpoint"],
+        )
+
+        # Check DB for opted_out remains False - use the test database session directly
+        async with TestSessionLocal() as db:
+            customer = await get_customer_by_phone(db, help_payload["from"]["endpoint"])
+            assert customer is not None, (
+                f"No customer found for phone {help_payload['from']['endpoint']}"
+            )
+            assert customer.opted_out is False
 
 
 class TestBackgroundTask:

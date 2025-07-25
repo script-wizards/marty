@@ -380,7 +380,7 @@ async def sms_webhook(
     x_sinch_timestamp: str = Header(None, alias="X-Sinch-Timestamp"),
     redis=Depends(get_redis),
     credentials: HTTPBasicCredentials = Depends(security),
-):
+) -> SinchSMSResponse:
     if (
         credentials.username != SINCH_WEBHOOK_USERNAME
         or credentials.password != SINCH_WEBHOOK_PASSWORD
@@ -391,15 +391,47 @@ async def sms_webhook(
             headers={"WWW-Authenticate": "Basic"},
         )
     raw_body = await request.body()
-    # Parse payload
     try:
         payload = SinchSMSWebhookPayload.model_validate_json(raw_body)
     except ValidationError as e:
         logger.error(f"Invalid webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid payload") from e
-    # Rate limiting
     await rate_limit(payload.from_info["endpoint"], redis)
-    # Background processing
+
+    phone = payload.from_info["endpoint"]
+    user_message = payload.message.strip().upper()
+    stop_keywords = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+    help_keywords = {"HELP"}
+    async with get_db_session() as db:
+        customer = await get_customer_by_phone(db, phone)
+        if not customer:
+            customer_data = CustomerCreate(phone=phone)
+            customer = await create_customer(db, customer_data)
+        if user_message in stop_keywords:
+            if not customer.opted_out:
+                customer.opted_out = True
+                await db.commit()
+            stop_msg = "Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help."
+            await get_sinch_client().send_sms(
+                body=stop_msg,
+                to=[phone],
+                from_=payload.to["endpoint"],
+            )
+            logger.info(f"Processed STOP for {phone}")
+            return SinchSMSResponse(message="Opt-out confirmation sent")
+        if user_message in help_keywords:
+            help_msg = "Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply."
+            await get_sinch_client().send_sms(
+                body=help_msg,
+                to=[phone],
+                from_=payload.to["endpoint"],
+            )
+            logger.info(f"Processed HELP for {phone}")
+            return SinchSMSResponse(message="Help message sent")
+        if customer.opted_out:
+            logger.info(f"Blocked message from opted-out user {phone}")
+            return SinchSMSResponse(message="User opted out; no further messages sent")
+
     background_tasks.add_task(process_incoming_sms, payload)
     logger.info(f"Accepted SMS from {payload.from_info['endpoint']}")
     return SinchSMSResponse(message="Inbound message received")
