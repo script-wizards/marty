@@ -409,7 +409,7 @@ async def handle_compliance_keywords(
         return "Help message sent"
 
     # Handle opted-out customers
-    if customer and customer.opted_out:
+    if customer.opted_out:
         logger.info(f"Blocked message from opted-out user {phone}")
         return "User opted out; no further messages sent"
 

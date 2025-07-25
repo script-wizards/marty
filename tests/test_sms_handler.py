@@ -187,7 +187,7 @@ class TestSignatureVerification:
             payload_str.encode(), signature, webhook_secret, current_time
         )
 
-    def test_verify_sinch_signature_wrong_secret(self, webhook_secret):
+    def test_verify_sinch_signature_wrong_secret(self):
         payload = {"test": "data"}
         payload_str = json.dumps(payload)
         signature = create_signature(payload_str, "wrong-secret")
