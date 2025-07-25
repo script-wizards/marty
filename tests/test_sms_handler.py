@@ -83,11 +83,15 @@ def unique_webhook_payload():
 
 @pytest.fixture
 def mock_redis_reset():
-    """Mock Redis that always returns 1 for incr calls - used for integration tests."""
+    """Mock Redis that tracks incr calls per key - used for integration tests."""
     with patch("src.sms_handler.redis.from_url") as mock:
         redis_mock = AsyncMock()
-        # Always return 1 for each incr call to simulate fresh Redis state
-        redis_mock.incr.side_effect = lambda key: 1
+        # Track incr calls per key to simulate real Redis behavior
+        key_store = {}
+        def incr_side_effect(key):
+            key_store[key] = key_store.get(key, 0) + 1
+            return key_store[key]
+        redis_mock.incr.side_effect = incr_side_effect
         redis_mock.expire = AsyncMock()
         mock.return_value = redis_mock
         yield redis_mock
