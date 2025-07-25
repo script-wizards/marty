@@ -404,10 +404,16 @@ async def sms_webhook(
     async with get_db_session() as db:
         customer = await get_customer_by_phone(db, phone)
         if not customer:
-            customer_data = CustomerCreate(phone=phone)
-            customer = await create_customer(db, customer_data)
+            try:
+                customer_data = CustomerCreate(phone=phone)
+                customer = await create_customer(db, customer_data)
+            except Exception as e:
+                logger.error(f"Failed to create customer for phone {phone}: {e}")
+                raise HTTPException(
+                    status_code=500, detail="Failed to process customer creation"
+                ) from e
         if user_message in STOP_KEYWORDS:
-            if not customer.opted_out:
+            if customer and not customer.opted_out:
                 customer.opted_out = True
                 await db.commit()
             stop_msg = "Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help."
@@ -427,7 +433,7 @@ async def sms_webhook(
             )
             logger.info(f"Processed HELP for {phone}")
             return SinchSMSResponse(message="Help message sent")
-        if customer.opted_out:
+        if customer and customer.opted_out:
             logger.info(f"Blocked message from opted-out user {phone}")
             return SinchSMSResponse(message="User opted out; no further messages sent")
 

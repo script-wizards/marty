@@ -586,3 +586,188 @@ class TestRedisIntegration:
         burst_count = await test_redis.get(burst_key)
         assert burst_count is not None
         assert int(burst_count) == 6
+
+
+class TestCustomerCreationFailure:
+    @pytest.mark.integration
+    def test_customer_creation_failure_stop_keyword(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+    ):
+        """Test that customer creation failure is handled properly for STOP keywords."""
+        with patch.dict(
+            os.environ,
+            {
+                "SINCH_WEBHOOK_USERNAME": "testuser",
+                "SINCH_WEBHOOK_PASSWORD": "testpass",
+            },
+        ):
+            import importlib
+
+            import src.sms_handler
+
+            importlib.reload(src.sms_handler)
+
+            headers = self._auth_header("testuser", "testpass")
+            stop_payload = unique_webhook_payload.copy()
+            stop_payload["message"] = "STOP"
+
+            with (
+                patch("src.sms_handler.get_customer_by_phone") as mock_get_customer,
+                patch("src.sms_handler.create_customer") as mock_create_customer,
+                patch("src.sms_handler.get_db_session") as mock_get_db_session,
+            ):
+                # Mock database session
+                mock_db = AsyncMock()
+                mock_get_db_session.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_db
+                )
+                mock_get_db_session.return_value.__aexit__ = AsyncMock(
+                    return_value=None
+                )
+
+                # Mock customer not found
+                mock_get_customer.return_value = None
+
+                # Mock customer creation failure
+                mock_create_customer.side_effect = Exception(
+                    "Database connection failed"
+                )
+
+                response = client.post(
+                    "/webhook/sms", json=stop_payload, headers=headers
+                )
+
+                assert response.status_code == 500
+                assert (
+                    "Failed to process customer creation" in response.json()["detail"]
+                )
+
+                # Verify no SMS was sent due to the failure
+                mock_sinch_client.send_sms.assert_not_called()
+
+    @pytest.mark.integration
+    def test_customer_creation_failure_help_keyword(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+    ):
+        """Test that customer creation failure is handled properly for HELP keywords."""
+        with patch.dict(
+            os.environ,
+            {
+                "SINCH_WEBHOOK_USERNAME": "testuser",
+                "SINCH_WEBHOOK_PASSWORD": "testpass",
+            },
+        ):
+            import importlib
+
+            import src.sms_handler
+
+            importlib.reload(src.sms_handler)
+
+            headers = self._auth_header("testuser", "testpass")
+            help_payload = unique_webhook_payload.copy()
+            help_payload["message"] = "HELP"
+
+            with (
+                patch("src.sms_handler.get_customer_by_phone") as mock_get_customer,
+                patch("src.sms_handler.create_customer") as mock_create_customer,
+                patch("src.sms_handler.get_db_session") as mock_get_db_session,
+            ):
+                # Mock database session
+                mock_db = AsyncMock()
+                mock_get_db_session.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_db
+                )
+                mock_get_db_session.return_value.__aexit__ = AsyncMock(
+                    return_value=None
+                )
+
+                # Mock customer not found
+                mock_get_customer.return_value = None
+
+                # Mock customer creation failure
+                mock_create_customer.side_effect = Exception(
+                    "Database connection failed"
+                )
+
+                response = client.post(
+                    "/webhook/sms", json=help_payload, headers=headers
+                )
+
+                assert response.status_code == 500
+                assert (
+                    "Failed to process customer creation" in response.json()["detail"]
+                )
+
+                # Verify no SMS was sent due to the failure
+                mock_sinch_client.send_sms.assert_not_called()
+
+    @pytest.mark.integration
+    def test_customer_creation_failure_opted_out_check(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+    ):
+        """Test that customer creation failure is handled properly for opted-out check."""
+        with patch.dict(
+            os.environ,
+            {
+                "SINCH_WEBHOOK_USERNAME": "testuser",
+                "SINCH_WEBHOOK_PASSWORD": "testpass",
+            },
+        ):
+            import importlib
+
+            import src.sms_handler
+
+            importlib.reload(src.sms_handler)
+
+            headers = self._auth_header("testuser", "testpass")
+            regular_payload = unique_webhook_payload.copy()
+            regular_payload["message"] = "Hello Marty"
+
+            with (
+                patch("src.sms_handler.get_customer_by_phone") as mock_get_customer,
+                patch("src.sms_handler.create_customer") as mock_create_customer,
+                patch("src.sms_handler.get_db_session") as mock_get_db_session,
+            ):
+                # Mock database session
+                mock_db = AsyncMock()
+                mock_get_db_session.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_db
+                )
+                mock_get_db_session.return_value.__aexit__ = AsyncMock(
+                    return_value=None
+                )
+
+                # Mock customer not found
+                mock_get_customer.return_value = None
+
+                # Mock customer creation failure
+                mock_create_customer.side_effect = Exception(
+                    "Database connection failed"
+                )
+
+                response = client.post(
+                    "/webhook/sms", json=regular_payload, headers=headers
+                )
+
+                assert response.status_code == 500
+                assert (
+                    "Failed to process customer creation" in response.json()["detail"]
+                )
+
+                # Verify no background task was added due to the failure
+                mock_sinch_client.send_sms.assert_not_called()
+
+    def _auth_header(self, username: str, password: str) -> dict[str, str]:
+        import base64
+
+        token = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
