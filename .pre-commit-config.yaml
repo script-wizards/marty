@@ -29,8 +29,8 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: just ci
+        entry: pytest -m "not integration"
         language: system
         types: [python]
+        files: ^(src/|tests/).*\.py$
         pass_filenames: false
-        always_run: true
