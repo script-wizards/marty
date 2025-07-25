@@ -369,6 +369,53 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             logger.error(f"Failed to send error message: {send_error}")
 
 
+async def handle_compliance_keywords(
+    user_message: str, customer, phone: str, from_number: str, db
+) -> str | None:
+    """
+    Handle compliance keywords (STOP, HELP) and opted-out customers.
+
+    Args:
+        user_message: The user's message in uppercase
+        customer: The customer object from database
+        phone: The customer's phone number
+        from_number: The sender's phone number
+        db: Database session
+
+    Returns:
+        str | None: Response message if a compliance action was taken, None otherwise
+    """
+    # Handle STOP keywords
+    if user_message in STOP_KEYWORDS:
+        if not customer.opted_out:
+            customer.opted_out = True
+            await db.commit()
+        await get_sinch_client().send_sms(
+            body=config.STOP_CONFIRMATION_MESSAGE,
+            to=[phone],
+            from_=from_number,
+        )
+        logger.info(f"Processed STOP for {phone}")
+        return "Opt-out confirmation sent"
+
+    # Handle HELP keywords
+    if user_message in HELP_KEYWORDS:
+        await get_sinch_client().send_sms(
+            body=config.HELP_RESPONSE_MESSAGE,
+            to=[phone],
+            from_=from_number,
+        )
+        logger.info(f"Processed HELP for {phone}")
+        return "Help message sent"
+
+    # Handle opted-out customers
+    if customer and customer.opted_out:
+        logger.info(f"Blocked message from opted-out user {phone}")
+        return "User opted out; no further messages sent"
+
+    return None
+
+
 security = HTTPBasic()
 
 SINCH_WEBHOOK_USERNAME = os.getenv("SINCH_WEBHOOK_USERNAME")
@@ -412,28 +459,14 @@ async def sms_webhook(
                 raise HTTPException(
                     status_code=500, detail="Failed to process customer creation"
                 ) from e
-        if user_message in STOP_KEYWORDS:
-            if customer and not customer.opted_out:
-                customer.opted_out = True
-                await db.commit()
-            await get_sinch_client().send_sms(
-                body=config.STOP_CONFIRMATION_MESSAGE,
-                to=[phone],
-                from_=payload.to["endpoint"],
-            )
-            logger.info(f"Processed STOP for {phone}")
-            return SinchSMSResponse(message="Opt-out confirmation sent")
-        if user_message in HELP_KEYWORDS:
-            await get_sinch_client().send_sms(
-                body=config.HELP_RESPONSE_MESSAGE,
-                to=[phone],
-                from_=payload.to["endpoint"],
-            )
-            logger.info(f"Processed HELP for {phone}")
-            return SinchSMSResponse(message="Help message sent")
-        if customer and customer.opted_out:
-            logger.info(f"Blocked message from opted-out user {phone}")
-            return SinchSMSResponse(message="User opted out; no further messages sent")
+
+        # Handle compliance keywords and opted-out customers
+        compliance_response = await handle_compliance_keywords(
+            user_message, customer, phone, payload.to["endpoint"], db
+        )
+
+        if compliance_response:
+            return SinchSMSResponse(message=compliance_response)
 
     background_tasks.add_task(process_incoming_sms, payload)
     logger.info(f"Accepted SMS from {payload.from_info['endpoint']}")
