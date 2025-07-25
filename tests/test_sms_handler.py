@@ -3,7 +3,9 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import time
+import uuid
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
@@ -23,6 +25,15 @@ from src.tools.external.sinch import (
 )
 
 client = TestClient(app)
+
+
+class TestHelper:
+    """Shared test helper methods to reduce code duplication."""
+
+    def _auth_header(self, username: str, password: str) -> dict[str, str]:
+        """Create Basic Auth header for testing."""
+        token = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
 
 
 @pytest.fixture
@@ -68,8 +79,6 @@ def valid_webhook_payload():
 @pytest.fixture
 def unique_webhook_payload():
     """Create unique payloads for each test to avoid rate limiting conflicts."""
-    import random
-    import uuid
 
     random_digits = random.randint(2000, 9999)
     phone_number = f"+1212555{random_digits}"
@@ -256,13 +265,7 @@ class TestRateLimiting:
         )
 
 
-class TestSMSWebhook:
-    def _auth_header(self, username: str, password: str) -> dict[str, str]:
-        import base64
-
-        token = base64.b64encode(f"{username}:{password}".encode()).decode()
-        return {"Authorization": f"Basic {token}"}
-
+class TestSMSWebhook(TestHelper):
     def test_webhook_missing_auth(self, valid_webhook_payload):
         # No Authorization header
         response = client.post("/webhook/sms", json=valid_webhook_payload)
@@ -710,7 +713,7 @@ class TestRedisIntegration:
         assert int(burst_count) == 6
 
 
-class TestCustomerCreationFailure:
+class TestCustomerCreationFailure(TestHelper):
     @pytest.mark.integration
     def test_customer_creation_failure_stop_keyword(
         self,
@@ -887,9 +890,3 @@ class TestCustomerCreationFailure:
 
                 # Verify no background task was added due to the failure
                 mock_sinch_client.send_sms.assert_not_called()
-
-    def _auth_header(self, username: str, password: str) -> dict[str, str]:
-        import base64
-
-        token = base64.b64encode(f"{username}:{password}".encode()).decode()
-        return {"Authorization": f"Basic {token}"}
