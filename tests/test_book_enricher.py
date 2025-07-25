@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -147,12 +147,20 @@ class TestBookEnricherTool:
         # Mock AI response
         mock_ai_response.return_value = '[{"title": "The Name of the Wind", "author": "Patrick Rothfuss", "confidence": 0.9}]'
 
-        # Mock database session
-        mock_session = AsyncMock()
+        # Mock database session - mix of sync and async methods
+        mock_session = MagicMock()
         mock_session_local.return_value.__aenter__.return_value = mock_session
-        mock_session.execute.return_value.scalars.return_value.first.return_value = (
-            None  # No existing book
-        )
+
+        # Mock the database result properly - execute returns awaitable result
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None  # No existing book
+        mock_session.execute.return_value = mock_result
+
+        # Mock async methods explicitly
+        mock_session.commit = AsyncMock()
+        mock_session.rollback = AsyncMock()
+
+        # Sync methods (add, merge, etc.) remain as regular mocks
 
         ai_response = "I recommend The Name of the Wind by Patrick Rothfuss"
 
