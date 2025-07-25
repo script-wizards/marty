@@ -416,18 +416,16 @@ async def sms_webhook(
             if customer and not customer.opted_out:
                 customer.opted_out = True
                 await db.commit()
-            stop_msg = "Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help."
             await get_sinch_client().send_sms(
-                body=stop_msg,
+                body=config.STOP_CONFIRMATION_MESSAGE,
                 to=[phone],
                 from_=payload.to["endpoint"],
             )
             logger.info(f"Processed STOP for {phone}")
             return SinchSMSResponse(message="Opt-out confirmation sent")
         if user_message in HELP_KEYWORDS:
-            help_msg = "Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply."
             await get_sinch_client().send_sms(
-                body=help_msg,
+                body=config.HELP_RESPONSE_MESSAGE,
                 to=[phone],
                 from_=payload.to["endpoint"],
             )

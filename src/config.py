@@ -42,6 +42,16 @@ class Config:
     )  # seconds between messages
     DEFAULT_PHONE_REGION: str = os.getenv("DEFAULT_PHONE_REGION", "US")
 
+    # 10DLC Compliance Messages
+    STOP_CONFIRMATION_MESSAGE: str = os.getenv(
+        "STOP_CONFIRMATION_MESSAGE",
+        "Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help.",
+    )
+    HELP_RESPONSE_MESSAGE: str = os.getenv(
+        "HELP_RESPONSE_MESSAGE",
+        "Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply.",
+    )
+
     @classmethod
     def validate_hardcover_setup(cls) -> bool:
         """Validate that Hardcover API is properly configured."""

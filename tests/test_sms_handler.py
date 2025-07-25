@@ -90,9 +90,11 @@ def mock_redis_reset():
         redis_mock = AsyncMock()
         # Track incr calls per key to simulate real Redis behavior
         key_store = {}
+
         def incr_side_effect(key):
             key_store[key] = key_store.get(key, 0) + 1
             return key_store[key]
+
         redis_mock.incr.side_effect = incr_side_effect
         redis_mock.expire = AsyncMock()
         mock.return_value = redis_mock
@@ -359,8 +361,10 @@ class TestSMSWebhook:
             response = await ac.post("/webhook/sms", json=stop_payload, headers=headers)
         assert response.status_code == 200
         assert response.json()["message"] == "Opt-out confirmation sent"
+        from src.config import config
+
         mock_sinch_client.send_sms.assert_awaited_with(
-            body="Dungeon Books: You have unsubscribed and will no longer receive messages. Reply HELP for help.",
+            body=config.STOP_CONFIRMATION_MESSAGE,
             to=[stop_payload["from"]["endpoint"]],
             from_=stop_payload["to"]["endpoint"],
         )
@@ -402,8 +406,10 @@ class TestSMSWebhook:
             response = await ac.post("/webhook/sms", json=help_payload, headers=headers)
         assert response.status_code == 200
         assert response.json()["message"] == "Help message sent"
+        from src.config import config
+
         mock_sinch_client.send_sms.assert_awaited_with(
-            body="Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply.",
+            body=config.HELP_RESPONSE_MESSAGE,
             to=[help_payload["from"]["endpoint"]],
             from_=help_payload["to"]["endpoint"],
         )
@@ -415,6 +421,116 @@ class TestSMSWebhook:
                 f"No customer found for phone {help_payload['from']['endpoint']}"
             )
             assert customer.opted_out is False
+
+    @patch.dict(
+        os.environ,
+        {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
+    )
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_webhook_opted_out_user_blocked(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+        use_postgres_db,
+        clean_postgres_db,
+    ):
+        """Test that opted-out customers have their regular messages blocked."""
+        TestSessionLocal, test_engine = use_postgres_db
+        import importlib
+
+        import src.sms_handler
+        from src.database import CustomerCreate, create_customer, get_customer_by_phone
+
+        importlib.reload(src.sms_handler)
+        headers = self._auth_header("testuser", "testpass")
+        regular_payload = unique_webhook_payload.copy()
+        regular_payload["message"] = "Hello Marty, recommend me a book!"
+
+        # Pre-create customer with opted_out=True
+        async with TestSessionLocal() as db:
+            customer_data = CustomerCreate(phone=regular_payload["from"]["endpoint"])
+            customer = await create_customer(db, customer_data)
+            customer.opted_out = True
+            await db.commit()
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/webhook/sms", json=regular_payload, headers=headers
+            )
+
+        assert response.status_code == 200
+        assert response.json()["message"] == "User opted out; no further messages sent"
+
+        # Verify no SMS was sent (no background processing occurred)
+        mock_sinch_client.send_sms.assert_not_called()
+
+        # Verify customer is still opted out
+        async with TestSessionLocal() as db:
+            customer = await get_customer_by_phone(
+                db, regular_payload["from"]["endpoint"]
+            )
+            assert customer is not None
+            assert customer.opted_out is True
+
+    @patch.dict(
+        os.environ,
+        {"SINCH_WEBHOOK_USERNAME": "testuser", "SINCH_WEBHOOK_PASSWORD": "testpass"},
+    )
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_webhook_multiple_stop_attempts(
+        self,
+        unique_webhook_payload,
+        mock_redis_reset,
+        mock_sinch_client,
+        use_postgres_db,
+        clean_postgres_db,
+    ):
+        """Test that multiple STOP attempts from already opted-out user are handled gracefully."""
+        TestSessionLocal, test_engine = use_postgres_db
+        import importlib
+
+        import src.sms_handler
+        from src.database import CustomerCreate, create_customer, get_customer_by_phone
+
+        importlib.reload(src.sms_handler)
+        headers = self._auth_header("testuser", "testpass")
+        stop_payload = unique_webhook_payload.copy()
+        stop_payload["message"] = "STOP"
+
+        # Pre-create customer with opted_out=True
+        async with TestSessionLocal() as db:
+            customer_data = CustomerCreate(phone=stop_payload["from"]["endpoint"])
+            customer = await create_customer(db, customer_data)
+            customer.opted_out = True
+            await db.commit()
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post("/webhook/sms", json=stop_payload, headers=headers)
+
+        assert response.status_code == 200
+        assert response.json()["message"] == "Opt-out confirmation sent"
+
+        # Verify opt-out confirmation SMS was still sent
+        from src.config import config
+
+        mock_sinch_client.send_sms.assert_awaited_once_with(
+            body=config.STOP_CONFIRMATION_MESSAGE,
+            to=[stop_payload["from"]["endpoint"]],
+            from_=stop_payload["to"]["endpoint"],
+        )
+
+        # Verify customer remains opted out
+        async with TestSessionLocal() as db:
+            customer = await get_customer_by_phone(db, stop_payload["from"]["endpoint"])
+            assert customer is not None
+            assert customer.opted_out is True
 
 
 class TestBackgroundTask:
