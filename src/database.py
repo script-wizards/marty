@@ -92,8 +92,8 @@ class Customer(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
-    phone: Mapped[str] = mapped_column(
-        String(20), unique=True, nullable=False, index=True
+    phone: Mapped[str | None] = mapped_column(
+        String(20), unique=True, nullable=True, index=True
     )
     square_customer_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, nullable=True
@@ -101,6 +101,15 @@ class Customer(Base):
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     opted_out: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Discord fields
+    discord_user_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
+    discord_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    platform: Mapped[str] = mapped_column(
+        String(50), default="sms", nullable=False
+    )  # 'sms', 'discord', 'both'
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -124,7 +133,17 @@ class Conversation(Base):
     customer_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("customers.id"), nullable=False
     )
-    phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    # Discord fields
+    discord_user_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    discord_channel_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    discord_guild_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    platform: Mapped[str] = mapped_column(
+        String(50), default="sms", nullable=False
+    )  # 'sms', 'discord'
     status: Mapped[str] = mapped_column(
         String(50), default="active"
     )  # active, ended, timeout
@@ -352,10 +371,13 @@ class RateLimit(Base):
 
 # Pydantic Schemas
 class CustomerCreate(BaseModel):
-    phone: str = Field(..., min_length=10, max_length=20)
+    phone: str | None = Field(None, min_length=10, max_length=20)
     name: str | None = None
     email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
+    discord_user_id: str | None = Field(None, max_length=255)
+    discord_username: str | None = Field(None, max_length=255)
+    platform: str = Field("sms", max_length=50)
 
 
 class CustomerUpdate(BaseModel):
@@ -363,24 +385,34 @@ class CustomerUpdate(BaseModel):
     email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
     opted_out: bool | None = None
+    discord_user_id: str | None = Field(None, max_length=255)
+    discord_username: str | None = Field(None, max_length=255)
+    platform: str | None = Field(None, max_length=50)
 
 
 class CustomerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    phone: str
+    phone: str | None = None
     name: str | None = None
     email: str | None = None
     square_customer_id: str | None = None
     opted_out: bool
+    discord_user_id: str | None = None
+    discord_username: str | None = None
+    platform: str
     created_at: datetime
     updated_at: datetime
 
 
 class ConversationCreate(BaseModel):
     customer_id: str
-    phone: str
+    phone: str | None = None
+    discord_user_id: str | None = None
+    discord_channel_id: str | None = None
+    discord_guild_id: str | None = None
+    platform: str = "sms"
     status: str = "active"
     context: dict[str, Any] | None = None
     mentioned_books: list[str] | None = None
@@ -390,6 +422,9 @@ class ConversationUpdate(BaseModel):
     status: str | None = None
     context: dict[str, Any] | None = None
     mentioned_books: list[str] | None = None
+    discord_channel_id: str | None = None
+    discord_guild_id: str | None = None
+    platform: str | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -397,7 +432,11 @@ class ConversationResponse(BaseModel):
 
     id: str
     customer_id: str
-    phone: str
+    phone: str | None = None
+    discord_user_id: str | None = None
+    discord_channel_id: str | None = None
+    discord_guild_id: str | None = None
+    platform: str
     status: str
     last_message_at: datetime
     created_at: datetime
@@ -625,6 +664,22 @@ async def get_customer_by_phone(db: AsyncSession, phone: str) -> Customer | None
         return None
 
 
+async def get_customer_by_discord_id(
+    db: AsyncSession, discord_user_id: str
+) -> Customer | None:
+    """Get customer by Discord user ID."""
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(Customer).where(Customer.discord_user_id == discord_user_id)
+        )
+        return result.scalars().first()
+    except Exception as e:
+        logger.error(f"Error fetching customer by Discord ID {discord_user_id}: {e}")
+        return None
+
+
 async def create_conversation(
     db: AsyncSession, conversation: ConversationCreate
 ) -> Conversation:
@@ -640,20 +695,32 @@ async def create_conversation(
         raise e
 
 
-async def get_active_conversation(db: AsyncSession, phone: str) -> Conversation | None:
-    """Get active conversation for a phone number."""
+async def get_active_conversation(
+    db: AsyncSession, identifier: str, platform: str = "sms"
+) -> Conversation | None:
+    """Get active conversation for a phone number or Discord user ID."""
     try:
         from sqlalchemy import select
 
-        result = await db.execute(
-            select(Conversation)
-            .where(Conversation.phone == phone)
-            .where(Conversation.status == "active")
-            .order_by(Conversation.created_at.desc())
-        )
+        if platform == "discord":
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.discord_user_id == identifier)
+                .where(Conversation.status == "active")
+                .order_by(Conversation.created_at.desc())
+            )
+        else:
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.phone == identifier)
+                .where(Conversation.status == "active")
+                .order_by(Conversation.created_at.desc())
+            )
         return result.scalars().first()
     except Exception as e:
-        logger.error(f"Error fetching active conversation for phone {phone}: {e}")
+        logger.error(
+            f"Error fetching active conversation for {platform} identifier {identifier}: {e}"
+        )
         return None
 
 
