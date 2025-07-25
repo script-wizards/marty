@@ -52,6 +52,10 @@ RATE_LIMIT_BURST_WINDOW = int(
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
 MAX_UNICODE_LENGTH = 70  # Unicode SMS character limit
 
+# 10DLC compliance keywords
+STOP_KEYWORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+HELP_KEYWORDS = {"HELP"}
+
 # Complete GSM-7 character set (basic + extended characters)
 GSM7_BASIC = (
     # Basic GSM-7 characters (0x00-0x7F) - complete standard set
@@ -397,14 +401,12 @@ async def sms_webhook(
 
     phone = payload.from_info["endpoint"]
     user_message = payload.message.strip().upper()
-    stop_keywords = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
-    help_keywords = {"HELP"}
     async with get_db_session() as db:
         customer = await get_customer_by_phone(db, phone)
         if not customer:
             customer_data = CustomerCreate(phone=phone)
             customer = await create_customer(db, customer_data)
-        if user_message in stop_keywords:
+        if user_message in STOP_KEYWORDS:
             if not customer.opted_out:
                 customer.opted_out = True
                 await db.commit()
@@ -416,7 +418,7 @@ async def sms_webhook(
             )
             logger.info(f"Processed STOP for {phone}")
             return SinchSMSResponse(message="Opt-out confirmation sent")
-        if user_message in help_keywords:
+        if user_message in HELP_KEYWORDS:
             help_msg = "Dungeon Books: For help, contact hello@dungeonbooks.com or reply STOP to unsubscribe. Msg&data rates may apply."
             await get_sinch_client().send_sms(
                 body=help_msg,
