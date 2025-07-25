@@ -24,6 +24,7 @@ dependencies = [
     "redis>=6.2.0",
     "structlog>=25.4.0",
     "phonenumbers>=9.0.9",
+    "discord-py>=2.5.2",
 ]
 
 [dependency-groups]
