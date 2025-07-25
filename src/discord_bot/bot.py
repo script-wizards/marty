@@ -46,6 +46,22 @@ class MartyBot(commands.Bot):
             await self.process_commands(message)
             return
 
+        # Only respond to @ mentions or DMs
+        if not (
+            self.user.mentioned_in(message)
+            or isinstance(message.channel, discord.DMChannel)
+        ):
+            return
+
+        # Check if user has Staff role (skip for DMs)
+        if not isinstance(message.channel, discord.DMChannel):
+            staff_role = discord.utils.get(message.guild.roles, name="Staff")
+            if not staff_role or staff_role not in message.author.roles:
+                await message.reply(
+                    "sorry, i'm only available to staff right now. ping `@nachi` if you need access."
+                )
+                return
+
         # Process the message through Marty's AI system
         await self.process_marty_message(message)
 

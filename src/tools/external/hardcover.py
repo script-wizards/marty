@@ -27,11 +27,17 @@ logger = structlog.get_logger(__name__)
 # Note: extract_and_replace_bookshop_link function removed as the 'links' field is always empty
 
 
-def generate_bookshop_search_link(title: str, our_affiliate_id: str = "108216") -> str:
-    """Generate a bookshop.org search link with our affiliate ID using short format."""
-    search_title = title.replace(" ", "+")
-    # Use short format for search too
-    return f"https://bookshop.org/search?keywords={search_title}&aid={our_affiliate_id}"
+def generate_bookshop_search_link(
+    title: str, author: str | None = None, our_affiliate_id: str = "108216"
+) -> str:
+    """Generate a bookshop.org search link with our affiliate ID using title and author."""
+    # Combine title and author for better search results
+    search_terms = [title]
+    if author:
+        search_terms.append(author)
+
+    search_query = " ".join(search_terms).replace(" ", "+")
+    return f"https://bookshop.org/search?keywords={search_query}&affiliate={our_affiliate_id}"
 
 
 class HardcoverAPIError(Exception):
@@ -497,8 +503,12 @@ class HardcoverTool(BaseTool):
 
             # Use search links as primary approach since direct ISBN links may be international editions
             if book.get("title"):
-                book["bookshop_link"] = generate_bookshop_search_link(book["title"])
-                logger.debug(f"Generated search link for book: {book.get('title')}")
+                book["bookshop_link"] = generate_bookshop_search_link(
+                    book["title"], book.get("author")
+                )
+                logger.debug(
+                    f"Generated search link for book: {book.get('title')} by {book.get('author', 'Unknown')}"
+                )
 
         return book
 
@@ -570,8 +580,12 @@ class HardcoverTool(BaseTool):
             # Use search links as primary approach since direct ISBN links may be international editions
             title = book.get("title", "")
             if title:
-                book["bookshop_link"] = generate_bookshop_search_link(title)
-                logger.debug(f"Generated search link for book: {title}")
+                book["bookshop_link"] = generate_bookshop_search_link(
+                    title, book.get("author")
+                )
+                logger.debug(
+                    f"Generated search link for book: {title} by {book.get('author', 'Unknown')}"
+                )
 
         return books
 
