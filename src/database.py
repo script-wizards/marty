@@ -100,6 +100,7 @@ class Customer(Base):
     )
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opted_out: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -361,6 +362,7 @@ class CustomerUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
     square_customer_id: str | None = Field(None, max_length=100)
+    opted_out: bool | None = None
 
 
 class CustomerResponse(BaseModel):
@@ -371,6 +373,7 @@ class CustomerResponse(BaseModel):
     name: str | None = None
     email: str | None = None
     square_customer_id: str | None = None
+    opted_out: bool
     created_at: datetime
     updated_at: datetime
 

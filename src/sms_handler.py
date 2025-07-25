@@ -8,7 +8,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    Header,
     HTTPException,
     Request,
     status,
@@ -52,6 +51,10 @@ RATE_LIMIT_BURST_WINDOW = int(
 # SMS configuration
 MAX_SMS_LENGTH = 160  # Standard SMS character limit
 MAX_UNICODE_LENGTH = 70  # Unicode SMS character limit
+
+# 10DLC compliance keywords
+STOP_KEYWORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+HELP_KEYWORDS = {"HELP"}
 
 # Complete GSM-7 character set (basic + extended characters)
 GSM7_BASIC = (
@@ -366,6 +369,53 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             logger.error(f"Failed to send error message: {send_error}")
 
 
+async def handle_compliance_keywords(
+    user_message: str, customer, phone: str, from_number: str, db
+) -> str | None:
+    """
+    Handle compliance keywords (STOP, HELP) and opted-out customers.
+
+    Args:
+        user_message: The user's message in uppercase
+        customer: The customer object from database
+        phone: The customer's phone number
+        from_number: The sender's phone number
+        db: Database session
+
+    Returns:
+        str | None: Response message if a compliance action was taken, None otherwise
+    """
+    # Handle STOP keywords
+    if user_message in STOP_KEYWORDS:
+        if not customer.opted_out:
+            customer.opted_out = True
+            await db.commit()
+        await get_sinch_client().send_sms(
+            body=config.STOP_CONFIRMATION_MESSAGE,
+            to=[phone],
+            from_=from_number,
+        )
+        logger.info(f"Processed STOP for {phone}")
+        return "Opt-out confirmation sent"
+
+    # Handle HELP keywords
+    if user_message in HELP_KEYWORDS:
+        await get_sinch_client().send_sms(
+            body=config.HELP_RESPONSE_MESSAGE,
+            to=[phone],
+            from_=from_number,
+        )
+        logger.info(f"Processed HELP for {phone}")
+        return "Help message sent"
+
+    # Handle opted-out customers
+    if customer.opted_out:
+        logger.info(f"Blocked message from opted-out user {phone}")
+        return "User opted out; no further messages sent"
+
+    return None
+
+
 security = HTTPBasic()
 
 SINCH_WEBHOOK_USERNAME = os.getenv("SINCH_WEBHOOK_USERNAME")
@@ -376,11 +426,9 @@ SINCH_WEBHOOK_PASSWORD = os.getenv("SINCH_WEBHOOK_PASSWORD")
 async def sms_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    x_sinch_signature: str = Header(None),
-    x_sinch_timestamp: str = Header(None, alias="X-Sinch-Timestamp"),
     redis=Depends(get_redis),
     credentials: HTTPBasicCredentials = Depends(security),
-):
+) -> SinchSMSResponse:
     if (
         credentials.username != SINCH_WEBHOOK_USERNAME
         or credentials.password != SINCH_WEBHOOK_PASSWORD
@@ -391,15 +439,35 @@ async def sms_webhook(
             headers={"WWW-Authenticate": "Basic"},
         )
     raw_body = await request.body()
-    # Parse payload
     try:
         payload = SinchSMSWebhookPayload.model_validate_json(raw_body)
     except ValidationError as e:
         logger.error(f"Invalid webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid payload") from e
-    # Rate limiting
     await rate_limit(payload.from_info["endpoint"], redis)
-    # Background processing
+
+    phone = payload.from_info["endpoint"]
+    user_message = payload.message.strip().upper()
+    async with get_db_session() as db:
+        customer = await get_customer_by_phone(db, phone)
+        if not customer:
+            try:
+                customer_data = CustomerCreate(phone=phone)
+                customer = await create_customer(db, customer_data)
+            except Exception as e:
+                logger.error(f"Failed to create customer for phone {phone}: {e}")
+                raise HTTPException(
+                    status_code=500, detail="Failed to process customer creation"
+                ) from e
+
+        # Handle compliance keywords and opted-out customers
+        compliance_response = await handle_compliance_keywords(
+            user_message, customer, phone, payload.to["endpoint"], db
+        )
+
+        if compliance_response:
+            return SinchSMSResponse(message=compliance_response)
+
     background_tasks.add_task(process_incoming_sms, payload)
     logger.info(f"Accepted SMS from {payload.from_info['endpoint']}")
     return SinchSMSResponse(message="Inbound message received")
