@@ -6,6 +6,8 @@ import structlog
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel
 
+from .tools import tool_registry
+
 # Configure logging
 logger = structlog.get_logger(__name__)
 
@@ -53,6 +55,7 @@ async def generate_ai_response(
     user_message: str,
     conversation_history: list[ConversationMessage],
     customer_context: dict | None = None,
+    platform: str = "sms",
 ) -> str:
     """
     Generate an AI response using Claude.
@@ -76,8 +79,17 @@ async def generate_ai_response(
         # Add the current user message
         messages.append({"role": "user", "content": user_message})
 
-        # Add customer context to the system prompt if available
-        system_prompt = MARTY_SYSTEM_PROMPT
+        # Load platform-specific system prompt
+        if platform == "discord":
+            system_prompt = load_system_prompt(
+                Path(__file__).parent.parent
+                / "prompts"
+                / "marty_discord_system_prompt.md"
+            )
+            logger.debug(f"Loaded Discord system prompt, length: {len(system_prompt)}")
+        else:
+            system_prompt = MARTY_SYSTEM_PROMPT
+            logger.debug(f"Loaded SMS system prompt, length: {len(system_prompt)}")
         if customer_context:
             context_info = []
 
@@ -105,20 +117,144 @@ async def generate_ai_response(
             if time_context:
                 system_prompt += f"\n\nCurrent Time & Date:\n{' | '.join(time_context)}"
 
-        # Generate response with Claude
+        # Generate response with Claude including tools
+        logger.debug(f"Calling Claude API with {len(messages)} messages")
         response = await client.messages.create(
             model="claude-3-5-sonnet-latest",
             max_tokens=500,
             temperature=0.7,
             system=system_prompt,
             messages=messages,
+            tools=tool_registry.get_claude_tools(),
         )
+        logger.debug(f"Claude API response received: {type(response)}")
 
-        # Extract the response text
-        if response.content and len(response.content) > 0:
-            content_block = response.content[0]
-            response_text = getattr(content_block, "text", str(content_block))
+        # Handle tool use and generate final response
+        if response.content:
+            logger.debug(f"Response content type: {type(response.content)}")
+            logger.debug(f"Response content length: {len(response.content)}")
+
+            tool_results = []
+            messages.append({"role": "assistant", "content": response.content})
+
+            # Execute any tool calls
+            for content_block in response.content:
+                logger.debug(f"Content block type: {type(content_block)}")
+                if hasattr(content_block, "type") and content_block.type == "tool_use":
+                    tool_name = content_block.name
+                    tool_input = content_block.input
+                    tool_use_id = content_block.id
+
+                    # Execute the tool
+                    tool = tool_registry.get_tool(tool_name)
+                    if tool:
+                        try:
+                            result = await tool.execute(**tool_input)
+                            tool_results.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_use_id,
+                                    "content": str(result.data)
+                                    if result.success
+                                    else f"Error: {result.error}",
+                                }
+                            )
+                        except Exception as e:
+                            logger.error(f"Tool execution error: {e}")
+                            tool_results.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_use_id,
+                                    "content": f"Error executing tool: {str(e)}",
+                                }
+                            )
+
+            # If tools were used, get final response
+            if tool_results:
+                # Format tool results properly for Claude
+                tool_results_content = []
+                for result in tool_results:
+                    tool_results_content.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": result["tool_use_id"],
+                            "content": result["content"],
+                        }
+                    )
+
+                messages.append({"role": "user", "content": tool_results_content})
+                logger.debug(
+                    f"Added tool results to messages: {len(tool_results)} results"
+                )
+
+                final_response = await client.messages.create(
+                    model="claude-3-5-sonnet-latest",
+                    max_tokens=500,
+                    temperature=0.7,
+                    system=system_prompt,
+                    messages=messages,
+                )
+                logger.debug(f"Final response received: {type(final_response)}")
+
+                if final_response.content and len(final_response.content) > 0:
+                    content_block = final_response.content[0]
+                    logger.debug(f"Final content block type: {type(content_block)}")
+
+                    # Try different ways to extract text
+                    if hasattr(content_block, "text"):
+                        response_text = content_block.text
+                    elif hasattr(content_block, "content"):
+                        response_text = content_block.content
+                    else:
+                        response_text = str(content_block)
+
+                    logger.debug(f"Final response text: {response_text[:100]}...")
+                else:
+                    logger.error("Final response has no content")
+                    # Fallback: try to generate a response without tools
+                    logger.debug("Attempting fallback response without tools")
+                    fallback_response = await client.messages.create(
+                        model="claude-3-5-sonnet-latest",
+                        max_tokens=500,
+                        temperature=0.7,
+                        system=system_prompt,
+                        messages=[{"role": "user", "content": user_message}],
+                    )
+
+                    if fallback_response.content and len(fallback_response.content) > 0:
+                        content_block = fallback_response.content[0]
+                        if hasattr(content_block, "text"):
+                            response_text = content_block.text
+                        else:
+                            response_text = str(content_block)
+                    else:
+                        response_text = (
+                            "I'm having trouble generating a response right now."
+                        )
+            else:
+                # No tools used, extract text directly
+                logger.debug("No tools used, extracting text directly")
+                if len(response.content) > 0:
+                    content_block = response.content[0]
+                    logger.debug(f"Content block type: {type(content_block)}")
+                    logger.debug(f"Content block attributes: {dir(content_block)}")
+
+                    # Try different ways to extract text
+                    if hasattr(content_block, "text"):
+                        response_text = content_block.text
+                    elif hasattr(content_block, "content"):
+                        response_text = content_block.content
+                    else:
+                        response_text = str(content_block)
+
+                    logger.debug(f"Extracted response text: {response_text[:100]}...")
+                else:
+                    logger.error("Response has no content blocks")
+                    response_text = (
+                        "I'm having trouble generating a response right now."
+                    )
         else:
+            logger.error("Response has no content")
             response_text = "I'm having trouble generating a response right now."
 
         return response_text

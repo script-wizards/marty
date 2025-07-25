@@ -494,7 +494,7 @@ class RateLimitCRUD:
         db: AsyncSession, identifier: str, limit_type: str, window_minutes: int = 60
     ) -> RateLimit:
         """Create a new rate limit record."""
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = datetime.now(UTC)
         db_rate_limit = RateLimit(
             identifier=identifier,
             limit_type=limit_type,
@@ -517,7 +517,7 @@ class RateLimitCRUD:
             and_(
                 RateLimit.identifier == identifier,
                 RateLimit.limit_type == limit_type,
-                RateLimit.expires_at > now.replace(tzinfo=None),
+                RateLimit.expires_at > now,
             )
         )
         result = await db.execute(stmt)
@@ -540,7 +540,7 @@ class RateLimitCRUD:
     async def cleanup_expired(db: AsyncSession) -> int:
         """Clean up expired rate limit records."""
         now = datetime.now(UTC)
-        stmt = delete(RateLimit).where(RateLimit.expires_at <= now.replace(tzinfo=None))
+        stmt = delete(RateLimit).where(RateLimit.expires_at <= now)
         result = await db.execute(stmt)
         await db.commit()
         return result.rowcount

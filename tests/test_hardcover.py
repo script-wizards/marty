@@ -140,7 +140,10 @@ class TestHardcoverToolBasics:
     def test_tool_properties(self, hardcover_tool: HardcoverTool):
         """Test tool properties for BaseTool interface."""
         assert hardcover_tool.name == "hardcover_api"
-        assert "Hardcover book data API" in hardcover_tool.description
+        assert (
+            "Gets book details, ratings, and purchase links"
+            in hardcover_tool.description
+        )
 
         parameters = hardcover_tool.parameters
         assert "action" in parameters

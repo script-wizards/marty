@@ -27,6 +27,7 @@ from src.database import (
     get_db,
     init_db,
 )
+from src.discord_bot.bot import create_bot
 from src.sms_handler import router as sms_router
 
 
@@ -52,10 +53,15 @@ structlog.configure(
 )
 
 # Configure standard logging to work with structlog
+# Set to WARNING to reduce Hardcover API noise
 logging.basicConfig(
     format="%(message)s",
-    level=logging.INFO,
+    level=logging.WARNING,
 )
+
+# But keep our app logs at INFO level
+logging.getLogger("src").setLevel(logging.INFO)
+logging.getLogger(__name__).setLevel(logging.INFO)
 
 logger = structlog.get_logger(__name__)
 
@@ -99,12 +105,31 @@ def validate_environment_variables() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan (startup and shutdown)."""
+    discord_bot = None
+    discord_task = None
     try:
         validate_environment_variables()
         logger.info("Environment variables validated")
 
         await init_db()
         logger.info("Database initialized successfully")
+
+        # Start Discord bot if token is configured
+        discord_token = os.getenv("DISCORD_BOT_TOKEN")
+        if discord_token:
+            discord_bot = create_bot()
+            # Start Discord bot in background task and keep reference
+            import asyncio
+
+            discord_task = asyncio.create_task(discord_bot.start(discord_token))
+            logger.info("Discord bot started successfully")
+
+            # Give the bot a moment to connect
+            await asyncio.sleep(1)
+        else:
+            logger.info(
+                "Discord bot token not configured, skipping Discord bot startup"
+            )
 
         logger.info("Marty chatbot started successfully")
     except Exception as e:
@@ -115,6 +140,19 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("Shutting down Marty chatbot...")
+
+        # Shutdown Discord bot if running
+        if discord_bot and not discord_bot.is_closed():
+            await discord_bot.close()
+            logger.info("Discord bot shutdown initiated")
+
+        # Cancel the Discord task
+        if discord_task and not discord_task.done():
+            discord_task.cancel()
+            try:
+                await discord_task
+            except asyncio.CancelledError:
+                logger.info("Discord bot task cancelled")
 
         await close_db()
 

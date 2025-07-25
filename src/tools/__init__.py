@@ -16,14 +16,6 @@ class ToolRegistry:
         """Register all core tools."""
         # Import and register tools here
         try:
-            from .book.enricher import BookEnricherTool
-
-            self.register(BookEnricherTool)
-        except ImportError as e:
-            # Tool dependencies might not be available in all environments
-            print(f"Warning: Could not register BookEnricherTool: {e}")
-
-        try:
             from .conversation.manager import ConversationManagerTool
 
             self.register(ConversationManagerTool)

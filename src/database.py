@@ -696,19 +696,28 @@ async def create_conversation(
 
 
 async def get_active_conversation(
-    db: AsyncSession, identifier: str, platform: str = "sms"
+    db: AsyncSession,
+    identifier: str,
+    platform: str = "sms",
+    channel_id: str | None = None,
 ) -> Conversation | None:
     """Get active conversation for a phone number or Discord user ID."""
     try:
         from sqlalchemy import select
 
         if platform == "discord":
-            result = await db.execute(
+            # For Discord, filter by both user ID and channel ID to ensure conversation isolation
+            query = (
                 select(Conversation)
                 .where(Conversation.discord_user_id == identifier)
                 .where(Conversation.status == "active")
-                .order_by(Conversation.created_at.desc())
             )
+
+            if channel_id:
+                query = query.where(Conversation.discord_channel_id == channel_id)
+
+            query = query.order_by(Conversation.created_at.desc())
+            result = await db.execute(query)
         else:
             result = await db.execute(
                 select(Conversation)

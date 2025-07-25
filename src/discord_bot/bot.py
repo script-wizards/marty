@@ -77,7 +77,7 @@ class MartyBot(commands.Bot):
 
                     # Get or create active conversation
                     conversation = await get_active_conversation(
-                        db, user_id, platform="discord"
+                        db, user_id, platform="discord", channel_id=channel_id
                     )
                     if not conversation:
                         conversation_data = ConversationCreate(
@@ -93,7 +93,7 @@ class MartyBot(commands.Bot):
                             f"Created new conversation for Discord user {username}"
                         )
 
-                    # Save the incoming message
+                    # Save the incoming message FIRST
                     incoming_message = MessageCreate(
                         conversation_id=conversation.id,
                         direction="inbound",
@@ -102,14 +102,16 @@ class MartyBot(commands.Bot):
                     )
                     await add_message(db, incoming_message)
 
-                    # Get recent conversation history
+                    # Get recent conversation history AFTER saving the current message
                     recent_messages = await get_conversation_messages(
-                        db, conversation.id, limit=10
+                        db, conversation.id, limit=6
                     )
 
                     # Convert to ConversationMessage format (exclude the current message)
                     conversation_history = []
-                    for msg in recent_messages[:-1]:  # Exclude the current message
+                    for msg in recent_messages[
+                        1:
+                    ]:  # Exclude the current message (first in desc order)
                         conversation_history.append(
                             ConversationMessage(
                                 role="user"
@@ -119,6 +121,14 @@ class MartyBot(commands.Bot):
                                 timestamp=msg.timestamp,
                             )
                         )
+
+                    logger.debug(
+                        f"Conversation history: {len(conversation_history)} messages"
+                    )
+                    for i, msg in enumerate(
+                        conversation_history[-3:]
+                    ):  # Show last 3 messages
+                        logger.debug(f"  {i}: {msg.role}: {msg.content[:50]}...")
 
                     # Prepare customer context
                     customer_context = {
@@ -137,6 +147,7 @@ class MartyBot(commands.Bot):
                         user_message=user_message,
                         conversation_history=conversation_history,
                         customer_context=customer_context,
+                        platform="discord",
                     )
 
                     # Save the response message to database

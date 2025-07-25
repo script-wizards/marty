@@ -5,7 +5,6 @@ This tool processes AI responses to extract book mentions, validates them
 against the Hardcover API, and stores verified books in the database.
 """
 
-import json
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -204,54 +203,71 @@ class BookEnricherTool(BaseTool):
                 )
             )
 
-        # Use AI for natural language book extraction
-        try:
-            from src.ai_client import generate_ai_response
+        # Use simple regex patterns for book extraction (avoid recursive AI calls)
+        # Look for patterns like "Book Title" by Author or **Book Title** by Author
+        import re
 
-            prompt = f"""Extract book titles and authors from this AI response about books.
-Return ONLY a JSON array of objects with this structure:
-[{{"title": "Book Title", "author": "Author Name or null", "confidence": 0.0-1.0}}]
+        # Pattern for "Book Title" by Author
+        book_pattern = r'["""]([^"""]+)["""]\s+by\s+([^,.\n]+)'
+        matches = re.findall(book_pattern, text, re.IGNORECASE)
+        for title, author in matches:
+            mentions.append(
+                BookMention(
+                    title=title.strip(),
+                    author=author.strip(),
+                    confidence=0.8,
+                    context=text,
+                    message_id=message_id,
+                )
+            )
 
-AI Response: "{text}"
+        # Pattern for **Book Title** by Author (Discord formatting)
+        bold_pattern = r"\*\*([^*]+)\*\*\s+by\s+([^,.\n]+)"
+        matches = re.findall(bold_pattern, text, re.IGNORECASE)
+        for title, author in matches:
+            mentions.append(
+                BookMention(
+                    title=title.strip(),
+                    author=author.strip(),
+                    confidence=0.8,
+                    context=text,
+                    message_id=message_id,
+                )
+            )
 
-Guidelines:
-- Only extract actual book titles, not just the word "book"
-- High confidence (0.8+) for explicit mentions, lower for implicit ones
-- Include novels, series, textbooks, any specific book titles
-- Return empty array [] if no books mentioned
-- Be conservative - only extract clear book references
-"""
+        # Pattern for just "Book Title" (without author)
+        title_pattern = r'["""]([^"""]+)["""]'
+        matches = re.findall(title_pattern, text, re.IGNORECASE)
+        for title in matches:
+            # Skip if we already found this title with an author
+            if not any(m.title == title.strip() for m in mentions):
+                mentions.append(
+                    BookMention(
+                        title=title.strip(),
+                        author=None,
+                        confidence=0.6,
+                        context=text,
+                        message_id=message_id,
+                    )
+                )
 
-            response = await generate_ai_response(prompt, [])
+        # Pattern for **Book Title** (Discord formatting without author)
+        bold_title_pattern = r"\*\*([^*]+)\*\*"
+        matches = re.findall(bold_title_pattern, text, re.IGNORECASE)
+        for title in matches:
+            # Skip if we already found this title with an author
+            if not any(m.title == title.strip() for m in mentions):
+                mentions.append(
+                    BookMention(
+                        title=title.strip(),
+                        author=None,
+                        confidence=0.6,
+                        context=text,
+                        message_id=message_id,
+                    )
+                )
 
-            # Parse JSON response
-            try:
-                book_data = json.loads(response.strip())
-                if not isinstance(book_data, list):
-                    return mentions  # Return the ISBN mentions we found
-
-                # Extend existing mentions (don't create new list)
-                for book in book_data:
-                    if isinstance(book, dict) and "title" in book:
-                        mentions.append(
-                            BookMention(
-                                title=book.get("title", "").strip(),
-                                author=book.get("author"),
-                                confidence=float(book.get("confidence", 0.5)),
-                                context=text,
-                                message_id=message_id,
-                            )
-                        )
-
-                return mentions
-
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse AI response as JSON: {response}")
-                return mentions  # Return the ISBN mentions we found
-
-        except Exception as e:
-            logger.error(f"AI book extraction failed: {e}")
-            raise
+        return mentions
 
     async def _validate_book(self, mention: BookMention) -> dict[str, Any] | None:
         """Validate a book mention against Hardcover API."""

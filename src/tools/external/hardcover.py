@@ -21,6 +21,19 @@ from src.tools.base import BaseTool, ToolResult
 logger = structlog.get_logger(__name__)
 
 
+# Note: extract_isbn_13_from_editions function removed as direct ISBN links may be international editions
+
+
+# Note: extract_and_replace_bookshop_link function removed as the 'links' field is always empty
+
+
+def generate_bookshop_search_link(title: str, our_affiliate_id: str = "108216") -> str:
+    """Generate a bookshop.org search link with our affiliate ID using short format."""
+    search_title = title.replace(" ", "+")
+    # Use short format for search too
+    return f"https://bookshop.org/search?keywords={search_title}&aid={our_affiliate_id}"
+
+
 class HardcoverAPIError(Exception):
     """Base exception for Hardcover API errors."""
 
@@ -119,9 +132,9 @@ class HardcoverTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Provides access to Hardcover book data API. "
-            "Supports book search, book details, user recommendations, "
-            "trending books, and schema introspection."
+            "Gets book details, ratings, and purchase links via Hardcover API. "
+            "Use when user asks about a specific book's rating or where to buy. "
+            "Supports book search, book details, and purchase link generation."
         )
 
     @property
@@ -143,7 +156,7 @@ class HardcoverTool(BaseTool):
             },
             "query": {
                 "type": "string",
-                "description": "Search query (required for search_books actions)",
+                "description": "Search query (required for search_books actions). Include both title and author for better results, e.g. 'The Scar China Miéville'",
             },
             "book_id": {
                 "type": "integer",
@@ -310,9 +323,7 @@ class HardcoverTool(BaseTool):
             try:
                 client = await self._get_client()
                 async with client as session:
-                    logger.debug(
-                        f"Executing query (attempt {attempt + 1}/{self._retry_count})"
-                    )
+                    # Minimal logging to reduce noise
                     result = await session.execute(query, variable_values=variables)
                     return result
 
@@ -381,7 +392,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        logger.info(f"Searching books: query={query}, limit={limit}")
+        logger.debug(f"Searching books: query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         search_result = result.get("search", {})
 
@@ -417,7 +428,7 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        logger.info(f"Searching books (raw): query={query}, limit={limit}")
+        logger.debug(f"Searching books (raw): query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         return result.get("search", {})
 
@@ -429,13 +440,16 @@ class HardcoverTool(BaseTool):
                 books_by_pk(id: $id) {
                     id
                     title
+                    subtitle
                     description
-                    isbn13
                     pages
                     release_year
+                    rating
                     cached_contributors
                     cached_tags
                     slug
+                    compilation
+                    links
                     image {
                         url
                     }
@@ -445,9 +459,13 @@ class HardcoverTool(BaseTool):
                             name
                         }
                     }
-                    book_category {
+                    ratings_count
+                    reviews_count
+                    users_count
+                    editions {
                         id
-                        name
+                        isbn_10
+                        isbn_13
                     }
                 }
             }
@@ -456,9 +474,33 @@ class HardcoverTool(BaseTool):
 
         variables = {"id": book_id}
 
-        logger.info(f"Getting book details: id={book_id}")
+        logger.debug(f"Getting book details: id={book_id}")
         result = await self._execute_with_retry(query, variables)
-        return result.get("books_by_pk")
+        book = result.get("books_by_pk")
+
+        # Add purchase link and author information
+        if book:
+            # Extract author from contributions
+            contributions = book.get("contributions", [])
+            authors = []
+            for contribution in contributions:
+                if isinstance(contribution, dict) and "author" in contribution:
+                    author = contribution["author"]
+                    if isinstance(author, dict) and "name" in author:
+                        authors.append(author["name"])
+
+            # Set author field (use first author or cached_contributors as fallback)
+            if authors:
+                book["author"] = authors[0] if len(authors) == 1 else ", ".join(authors)
+            elif book.get("cached_contributors"):
+                book["author"] = book["cached_contributors"]
+
+            # Use search links as primary approach since direct ISBN links may be international editions
+            if book.get("title"):
+                book["bookshop_link"] = generate_bookshop_search_link(book["title"])
+                logger.debug(f"Generated search link for book: {book.get('title')}")
+
+        return book
 
     async def _get_books_by_ids(self, book_ids: list[int]) -> list[dict[str, Any]]:
         """Get detailed book information for multiple books by their IDs."""
@@ -468,13 +510,16 @@ class HardcoverTool(BaseTool):
                 books(where: {id: {_in: $ids}}) {
                     id
                     title
+                    subtitle
                     description
-                    isbn13
                     pages
                     release_year
+                    rating
                     cached_contributors
                     cached_tags
                     slug
+                    compilation
+                    links
                     image {
                         url
                     }
@@ -484,9 +529,13 @@ class HardcoverTool(BaseTool):
                             name
                         }
                     }
-                    book_category {
+                    ratings_count
+                    reviews_count
+                    users_count
+                    editions {
                         id
-                        name
+                        isbn_10
+                        isbn_13
                     }
                 }
             }
@@ -495,11 +544,36 @@ class HardcoverTool(BaseTool):
 
         variables = {"ids": book_ids}
 
-        logger.info(
+        logger.debug(
             f"Getting books by IDs: ids={book_ids[:5]}{'...' if len(book_ids) > 5 else ''}"
         )
         result = await self._execute_with_retry(query, variables)
-        return result.get("books", [])
+        books = result.get("books", [])
+
+        # Enhance books with purchase links and author information
+        for book in books:
+            # Extract author from contributions
+            contributions = book.get("contributions", [])
+            authors = []
+            for contribution in contributions:
+                if isinstance(contribution, dict) and "author" in contribution:
+                    author = contribution["author"]
+                    if isinstance(author, dict) and "name" in author:
+                        authors.append(author["name"])
+
+            # Set author field (use first author or cached_contributors as fallback)
+            if authors:
+                book["author"] = authors[0] if len(authors) == 1 else ", ".join(authors)
+            elif book.get("cached_contributors"):
+                book["author"] = book["cached_contributors"]
+
+            # Use search links as primary approach since direct ISBN links may be international editions
+            title = book.get("title", "")
+            if title:
+                book["bookshop_link"] = generate_bookshop_search_link(title)
+                logger.debug(f"Generated search link for book: {title}")
+
+        return books
 
     async def _get_user_recommendations(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get personalized book recommendations for the authenticated user."""

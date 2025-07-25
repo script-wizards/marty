@@ -305,7 +305,9 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
 
             # Convert to ConversationMessage format (exclude the current message)
             conversation_history = []
-            for msg in recent_messages[:-1]:  # Exclude the current message
+            for msg in recent_messages[
+                1:
+            ]:  # Exclude the current message (first in desc order)
                 conversation_history.append(
                     ConversationMessage(
                         role="user" if msg.direction == "inbound" else "assistant",
