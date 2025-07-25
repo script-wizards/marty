@@ -68,9 +68,11 @@ def valid_webhook_payload():
 @pytest.fixture
 def unique_webhook_payload():
     """Create unique payloads for each test to avoid rate limiting conflicts."""
+    import random
     import uuid
 
-    phone_number = f"+1212555{str(uuid.uuid4().int)[:4]}"
+    random_digits = random.randint(2000, 9999)
+    phone_number = f"+1212555{random_digits}"
     return {
         "id": f"test-id-{uuid.uuid4()}",
         "type": "mo_text",
