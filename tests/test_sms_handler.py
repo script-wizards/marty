@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import importlib
 import json
 import os
 import random
@@ -296,7 +297,6 @@ class TestSMSWebhook(TestHelper):
         clean_postgres_db,
     ):
         TestSessionLocal, test_engine = use_postgres_db
-        import importlib
 
         import src.sms_handler
 
@@ -320,8 +320,6 @@ class TestSMSWebhook(TestHelper):
                 "SINCH_WEBHOOK_PASSWORD": "testpass",
             },
         ):
-            import importlib
-
             import src.sms_handler
 
             importlib.reload(src.sms_handler)
@@ -348,8 +346,6 @@ class TestSMSWebhook(TestHelper):
         clean_postgres_db,
     ):
         TestSessionLocal, test_engine = use_postgres_db
-        import importlib
-
         import src.sms_handler
         from src.database import get_customer_by_phone
 
@@ -393,8 +389,6 @@ class TestSMSWebhook(TestHelper):
         clean_postgres_db,
     ):
         TestSessionLocal, test_engine = use_postgres_db
-        import importlib
-
         import src.sms_handler
         from src.database import get_customer_by_phone
 
@@ -441,7 +435,6 @@ class TestSMSWebhook(TestHelper):
     ):
         """Test that opted-out customers have their regular messages blocked."""
         TestSessionLocal, test_engine = use_postgres_db
-        import importlib
 
         import src.sms_handler
         from src.database import CustomerCreate, create_customer, get_customer_by_phone
@@ -495,8 +488,6 @@ class TestSMSWebhook(TestHelper):
     ):
         """Test that multiple STOP attempts from already opted-out user are handled gracefully."""
         TestSessionLocal, test_engine = use_postgres_db
-        import importlib
-
         import src.sms_handler
         from src.database import CustomerCreate, create_customer, get_customer_by_phone
 
@@ -729,8 +720,6 @@ class TestCustomerCreationFailure(TestHelper):
                 "SINCH_WEBHOOK_PASSWORD": "testpass",
             },
         ):
-            import importlib
-
             import src.sms_handler
 
             importlib.reload(src.sms_handler)
@@ -788,8 +777,6 @@ class TestCustomerCreationFailure(TestHelper):
                 "SINCH_WEBHOOK_PASSWORD": "testpass",
             },
         ):
-            import importlib
-
             import src.sms_handler
 
             importlib.reload(src.sms_handler)
@@ -847,8 +834,6 @@ class TestCustomerCreationFailure(TestHelper):
                 "SINCH_WEBHOOK_PASSWORD": "testpass",
             },
         ):
-            import importlib
-
             import src.sms_handler
 
             importlib.reload(src.sms_handler)
