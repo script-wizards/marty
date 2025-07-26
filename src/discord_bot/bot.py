@@ -19,8 +19,76 @@ from ..database import (
     get_customer_by_discord_id,
     get_db_session,
 )
+from ..tools.external.hardcover import HardcoverTool
 
 logger = logging.getLogger(__name__)
+
+
+def create_book_embed(book_data: dict[str, Any]) -> discord.Embed:
+    """Create a rich Discord embed for a book using Hardcover API data."""
+    title = book_data.get("title", "Unknown Title")
+    author = book_data.get("author") or book_data.get(
+        "cached_contributors", "Unknown Author"
+    )
+    description = book_data.get("description", "")
+
+    # Create the embed with book title and author
+    embed = discord.Embed(
+        title=title,
+        description=f"by {author}",
+        color=0x8B4513,  # Saddle brown color for bookstore theme
+    )
+
+    # Add book cover image if available
+    image_url = (
+        book_data.get("image", {}).get("url") if book_data.get("image") else None
+    )
+    if image_url:
+        embed.set_thumbnail(url=image_url)
+
+    # Add book details as fields
+    rating = book_data.get("rating")
+    if rating:
+        embed.add_field(name="Rating", value=f"⭐ {rating:.1f}", inline=True)
+
+    pages = book_data.get("pages")
+    if pages:
+        embed.add_field(name="Pages", value=str(pages), inline=True)
+
+    release_year = book_data.get("release_year")
+    if release_year:
+        embed.add_field(name="Year", value=str(release_year), inline=True)
+
+    ratings_count = book_data.get("ratings_count")
+    if ratings_count:
+        embed.add_field(name="Ratings", value=f"{ratings_count:,} readers", inline=True)
+
+    # Add description (truncated if too long)
+    if description:
+        # Discord embed description limit is 4096 characters
+        truncated_desc = (
+            description[:500] + "..." if len(description) > 500 else description
+        )
+        embed.add_field(name="Description", value=truncated_desc, inline=False)
+
+    # Add links
+    bookshop_link = book_data.get("bookshop_link")
+    slug = book_data.get("slug")
+
+    links = []
+    if slug:
+        hardcover_url = f"https://hardcover.app/books/{slug}"
+        links.append(f"[Hardcover]({hardcover_url})")
+    if bookshop_link:
+        links.append(f"[Buy Book]({bookshop_link})")
+
+    if links:
+        embed.add_field(name="Links", value=" • ".join(links), inline=False)
+
+    # Add footer
+    embed.set_footer(text="📚 Dungeon Books • Powered by Hardcover API")
+
+    return embed
 
 
 class MartyBot(commands.Bot):
@@ -30,6 +98,13 @@ class MartyBot(commands.Bot):
         intents = discord.Intents.default()  # type: ignore
         intents.message_content = True
         super().__init__(command_prefix="!", intents=intents)
+
+        # Initialize Hardcover API tool
+        try:
+            self.hardcover = HardcoverTool()
+        except Exception as e:
+            logger.error(f"Failed to initialize Hardcover API: {e}")
+            self.hardcover = None
 
     async def on_ready(self) -> None:
         """Called when the bot has finished logging in and setting up."""
@@ -193,7 +268,45 @@ class MartyBot(commands.Bot):
 
 def create_bot() -> MartyBot:
     """Create and return a MartyBot instance."""
-    return MartyBot()
+    bot = MartyBot()
+
+    @bot.command()
+    async def book(ctx: commands.Context, *, query: str) -> None:
+        """Search for a book and display its information using Hardcover API."""
+        if not bot.hardcover:
+            await ctx.send("search spell's broken rn, try again later")
+            return
+
+        if not query.strip():
+            await ctx.send("need a book title or something to search for")
+            return
+
+        try:
+            async with ctx.typing():
+                # Search for the book using Hardcover API
+                result = await bot.hardcover.execute(
+                    action="search_books", query=query, limit=1
+                )
+
+                if not result.success or not result.data:
+                    await ctx.send(
+                        f"hmm that book might exist in another dimension, lemme double check '{query}'"
+                    )
+                    return
+
+                book_data = result.data[0]  # Get the first book result
+                embed = create_book_embed(book_data)
+                await ctx.send(embed=embed)
+
+                logger.info(
+                    f"Sent book embed for '{book_data.get('title', 'Unknown')}' in response to !book command"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in book command: {e}")
+            await ctx.send("search spell malfunctioned, try that again")
+
+    return bot
 
 
 async def run_bot() -> None:
