@@ -21,7 +21,7 @@ class ThreadRenameTool(BaseTool):
         return {
             "thread_name": {
                 "type": "string",
-                "description": "The new thread name (max 50 chars). Use formats like 'sci-fi recs', 'discussion: book title', 'fantasy suggestions'. Keep it lowercase and casual.",
+                "description": "The new thread name (max 50 chars). Use formats like 'sci-fi recs', 'discussion: book title', 'fantasy suggestions'. Keep it short and casual.",
                 "maxLength": 50,
             }
         }
