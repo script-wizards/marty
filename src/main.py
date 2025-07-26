@@ -90,7 +90,7 @@ def validate_environment_variables() -> None:
             f"Missing required environment variables: {', '.join(missing_vars)}"
         )
 
-    logger.info(f"Environment: {os.getenv('ENV', 'development')}")
+    logger.info(f"Environment: {os.getenv('ENV', 'dev')}")
     logger.info(f"Database URL configured: {bool(os.getenv('DATABASE_URL'))}")
     logger.info(f"Anthropic API key configured: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
     logger.info(
@@ -198,7 +198,7 @@ async def health_check(
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
-            "environment": os.getenv("ENV", "development"),
+            "environment": os.getenv("ENV", "dev"),
         }
 
         if include_migrations:
@@ -254,13 +254,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             conversation = await create_conversation(db, conversation_data)
 
-        incoming_message = MessageCreate(
-            conversation_id=conversation.id,
-            direction="inbound",
-            content=request.message,
-        )
-        await add_message(db, incoming_message)
-
+        # Get conversation history FIRST (before saving new message)
         messages = await get_conversation_messages(db, conversation.id, limit=10)
         conversation_history = [
             ConversationMessage(
@@ -271,11 +265,17 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             for msg in reversed(messages)  # Reverse to get chronological order
         ]
 
+        # Save the incoming message AFTER getting history
+        incoming_message = MessageCreate(
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=request.message,
+        )
+        await add_message(db, incoming_message)
+
         response_text = await generate_ai_response(
             user_message=request.message,
-            conversation_history=conversation_history[
-                :-1
-            ],  # Exclude the message we just added
+            conversation_history=conversation_history,
             customer_context={
                 "customer_id": customer.id,
                 "phone": customer.phone,
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     config = Config()
     port = int(os.getenv("PORT", "8000"))
     config.bind = [f"[::]:{port}"]  # Dual-stack IPv4/IPv6 binding for Railway
-    config.use_reloader = os.getenv("ENV") == "development"
+    config.use_reloader = os.getenv("ENV") == "dev"
     config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
     async def shutdown_trigger():

@@ -53,14 +53,16 @@ class MartyBot(commands.Bot):
         ):
             return
 
-        # Check if user has Staff role (skip for DMs)
+        # Check if user has Staff role (skip for DMs and dev environment)
         if not isinstance(message.channel, discord.DMChannel):
-            staff_role = discord.utils.get(message.guild.roles, name="Staff")
-            if not staff_role or staff_role not in message.author.roles:
-                await message.reply(
-                    "sorry, i'm only available to staff right now. ping `@nachi` if you need access."
-                )
-                return
+            # Skip staff role check in development environment
+            if os.getenv("ENV") != "dev":
+                staff_role = discord.utils.get(message.guild.roles, name="Staff")
+                if not staff_role or staff_role not in message.author.roles:
+                    await message.reply(
+                        "sorry, i'm only available to staff right now. ping `@nachi` if you need access."
+                    )
+                    return
 
         # Process the message through Marty's AI system
         await self.process_marty_message(message)
@@ -109,25 +111,14 @@ class MartyBot(commands.Bot):
                             f"Created new conversation for Discord user {username}"
                         )
 
-                    # Save the incoming message FIRST
-                    incoming_message = MessageCreate(
-                        conversation_id=conversation.id,
-                        direction="inbound",
-                        content=user_message,
-                        status="received",
-                    )
-                    await add_message(db, incoming_message)
-
-                    # Get recent conversation history AFTER saving the current message
+                    # Get recent conversation history FIRST (before saving new message)
                     recent_messages = await get_conversation_messages(
                         db, conversation.id, limit=6
                     )
 
-                    # Convert to ConversationMessage format (exclude the current message)
+                    # Convert to ConversationMessage format
                     conversation_history = []
-                    for msg in recent_messages[
-                        1:
-                    ]:  # Exclude the current message (first in desc order)
+                    for msg in recent_messages:
                         conversation_history.append(
                             ConversationMessage(
                                 role="user"
@@ -137,6 +128,15 @@ class MartyBot(commands.Bot):
                                 timestamp=msg.timestamp,
                             )
                         )
+
+                    # Save the incoming message AFTER getting history
+                    incoming_message = MessageCreate(
+                        conversation_id=conversation.id,
+                        direction="inbound",
+                        content=user_message,
+                        status="received",
+                    )
+                    await add_message(db, incoming_message)
 
                     logger.debug(
                         f"Conversation history: {len(conversation_history)} messages"

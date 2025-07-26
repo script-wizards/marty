@@ -35,7 +35,7 @@ def test_health_endpoint_returns_enhanced_json():
     assert data["timestamp"].endswith("Z") or "+" in data["timestamp"]
 
     # Check environment
-    assert data["environment"] in ["development", "production", "test"]
+    assert data["environment"] in ["dev", "stage", "prod", "test"]
 
 
 def test_health_endpoint_content_type():
