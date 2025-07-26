@@ -116,9 +116,11 @@ class MartyBot(commands.Bot):
                         db, conversation.id, limit=6
                     )
 
-                    # Convert to ConversationMessage format
+                    # Convert to ConversationMessage format (reverse for chronological order)
                     conversation_history = []
-                    for msg in recent_messages:
+                    for msg in reversed(
+                        recent_messages
+                    ):  # Reverse to get chronological order
                         conversation_history.append(
                             ConversationMessage(
                                 role="user"
