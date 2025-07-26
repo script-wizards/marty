@@ -279,7 +279,7 @@ class TestHardcoverToolBasics:
         # Mock two calls: first for trending IDs, second for book details
         mock_gql_session.execute.side_effect = [
             MOCK_TRENDING_RESPONSE,  # First call to get trending book IDs
-            MOCK_BOOKS_RESPONSE,     # Second call to get book details
+            MOCK_BOOKS_RESPONSE,  # Second call to get book details
         ]
 
         result = await hardcover_tool.execute(action="get_trending_books", limit=5)

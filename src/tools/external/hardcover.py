@@ -152,6 +152,7 @@ class HardcoverTool(BaseTool):
                     "get_books_by_ids",
                     "get_user_recommendations",
                     "get_trending_books",
+                    "get_recent_releases",
                     "get_current_user",
                     "introspect_schema",
                     "generate_hardcover_link",
@@ -282,6 +283,15 @@ class HardcoverTool(BaseTool):
                     },
                 )
 
+            elif action == "get_recent_releases":
+                limit = kwargs.get("limit", 10)
+                data = await self._get_recent_releases(limit)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "limit": limit},
+                )
+
             elif action == "get_current_user":
                 data = await self._get_current_user()
                 return ToolResult(success=True, data=data, metadata={"action": action})
@@ -370,10 +380,18 @@ class HardcoverTool(BaseTool):
                         await asyncio.sleep(delay)
 
             except Exception as e:
-                logger.error(f"Unexpected error: {e}")
+                logger.error(
+                    f"Unexpected error in GraphQL execution: {type(e).__name__}: {e}"
+                )
+                logger.error(f"Exception details: {repr(e)}")
+                if hasattr(e, "__cause__") and e.__cause__:
+                    logger.error(
+                        f"Caused by: {type(e.__cause__).__name__}: {e.__cause__}"
+                    )
                 last_error = e
                 if attempt < self._retry_count - 1:
                     delay = self._retry_delay * (2**attempt)
+                    logger.warning(f"Retrying in {delay}s after unexpected error")
                     await asyncio.sleep(delay)
 
         # All retries failed
@@ -667,6 +685,127 @@ class HardcoverTool(BaseTool):
             logger.warning("No book IDs returned from trending books query")
 
         return trending_result
+
+    async def _get_recent_releases(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get recently released books ordered by number of readers."""
+        try:
+            # Calculate date range for "recent" (last 1 month)
+            one_month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            today = datetime.now().strftime("%Y-%m-%d")
+
+            # Always pull 25 books to get better sorting, then return top 10
+            query_limit = 25
+            logger.info(
+                f"Getting recent releases: from={one_month_ago}, to={today}, fetching={query_limit}, returning={limit}"
+            )
+
+            query = gql(
+                """
+                query GetRecentReleases($from_date: date!, $to_date: date!, $limit: Int!) {
+                    books(
+                        where: {
+                            release_date: {_gte: $from_date, _lte: $to_date}
+                        }
+                        order_by: {users_count: desc}
+                        limit: $limit
+                    ) {
+                        id
+                        title
+                        subtitle
+                        description
+                        pages
+                        release_year
+                        release_date
+                        rating
+                        cached_contributors
+                        cached_tags
+                        slug
+                        compilation
+                        links
+                        image {
+                            url
+                        }
+                        contributions {
+                            author {
+                                id
+                                name
+                            }
+                        }
+                        ratings_count
+                        reviews_count
+                        users_count
+                        editions {
+                            id
+                            isbn_10
+                            isbn_13
+                        }
+                    }
+                }
+            """
+            )
+
+            variables = {
+                "from_date": one_month_ago,
+                "to_date": today,
+                "limit": query_limit,
+            }
+            logger.debug(f"GraphQL variables: {variables}")
+
+            result = await self._execute_with_retry(query, variables)
+            logger.debug(f"Raw GraphQL result: {result}")
+
+            all_books = result.get("books", [])
+            logger.info(
+                f"Retrieved {len(all_books)} books from GraphQL query, selecting top {limit}"
+            )
+
+            # Take only the top N books (already sorted by users_count desc)
+            books = all_books[:limit]
+
+        except Exception as e:
+            logger.error(f"Error in _get_recent_releases: {type(e).__name__}: {e}")
+            logger.error(f"Exception details: {repr(e)}")
+            raise
+
+        # Enhance books with purchase links and author information (same as _get_books_by_ids)
+        for book in books:
+            # Extract author from contributions
+            contributions = book.get("contributions", [])
+            authors = []
+            for contribution in contributions:
+                if isinstance(contribution, dict) and "author" in contribution:
+                    author = contribution["author"]
+                    if isinstance(author, dict) and "name" in author:
+                        authors.append(author["name"])
+
+            # Set author field (use first author or cached_contributors as fallback)
+            if authors:
+                book["author"] = authors[0] if len(authors) == 1 else ", ".join(authors)
+            elif book.get("cached_contributors"):
+                book["author"] = book["cached_contributors"]
+
+            # Use search links as primary approach since direct ISBN links may be international editions
+            title = book.get("title", "")
+            if title:
+                book["bookshop_link"] = generate_bookshop_search_link(
+                    title, book.get("author")
+                )
+
+            # Truncate description for better presentation
+            description = book.get("description", "")
+            if description and len(description) > 200:
+                book["short_description"] = description[:200] + "..."
+            else:
+                book["short_description"] = description
+
+        logger.info(
+            f"Returning top {len(books)} recent releases sorted by reader count"
+        )
+        for i, book in enumerate(books, 1):
+            readers = book.get("users_count", 0)
+            logger.debug(f"#{i}: {book.get('title', 'Unknown')} - {readers} readers")
+
+        return books
 
     async def _get_current_user(self) -> dict[str, Any]:
         """Get current user information (test query)."""
