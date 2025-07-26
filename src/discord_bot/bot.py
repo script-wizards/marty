@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import discord  # type: ignore
+from discord import app_commands  # type: ignore
 from discord.ext import commands  # type: ignore
 
 from ..ai_client import ConversationMessage, generate_ai_response
@@ -109,6 +110,13 @@ class MartyBot(commands.Bot):
     async def on_ready(self) -> None:
         """Called when the bot has finished logging in and setting up."""
         logger.info(f"{self.user} has connected to Discord!")
+
+        # Sync slash commands
+        try:
+            synced = await self.tree.sync()
+            logger.info(f"Synced {len(synced)} slash commands")
+        except Exception as e:
+            logger.error(f"Failed to sync slash commands: {e}")
 
     async def on_message(self, message: Any) -> None:
         """Handle incoming Discord messages."""
@@ -305,6 +313,60 @@ def create_bot() -> MartyBot:
         except Exception as e:
             logger.error(f"Error in book command: {e}")
             await ctx.send("search spell malfunctioned, try that again")
+
+    @bot.tree.command(
+        name="book", description="Search for a book and get detailed information"
+    )
+    @app_commands.describe(query="Book title or author to search for")
+    async def book_slash(interaction: discord.Interaction, query: str) -> None:
+        """Slash command version of book search."""
+        if not bot.hardcover:
+            await interaction.response.send_message(
+                "search spell's broken rn, try again later", ephemeral=True
+            )
+            return
+
+        if not query.strip():
+            await interaction.response.send_message(
+                "need a book title or something to search for", ephemeral=True
+            )
+            return
+
+        try:
+            # Defer the response since API calls might take time
+            await interaction.response.defer()
+
+            # Search for the book using Hardcover API
+            result = await bot.hardcover.execute(
+                action="search_books", query=query, limit=1
+            )
+
+            if not result.success or not result.data:
+                await interaction.followup.send(
+                    f"hmm that book might exist in another dimension, lemme double check '{query}'"
+                )
+                return
+
+            book_data = result.data[0]  # Get the first book result
+            embed = create_book_embed(book_data)
+            await interaction.followup.send(embed=embed)
+
+            logger.info(
+                f"Sent book embed for '{book_data.get('title', 'Unknown')}' in response to /book slash command"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in book slash command: {e}")
+            try:
+                await interaction.followup.send(
+                    "search spell malfunctioned, try that again"
+                )
+            except Exception as e:
+                # If followup fails, try editing the original response
+                logger.error(f"Failed to send error message: {e}")
+                await interaction.edit_original_response(
+                    content="search spell malfunctioned, try that again"
+                )
 
     return bot
 
