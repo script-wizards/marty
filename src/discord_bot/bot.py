@@ -25,7 +25,7 @@ from ..tools.external.hardcover import HardcoverTool
 logger = logging.getLogger(__name__)
 
 
-def create_book_embed(book_data: dict[str, Any]) -> discord.Embed:
+def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discord.Embed:
     """Create a rich Discord embed for a book using Hardcover API data."""
     title = book_data.get("title", "Unknown Title")
     author = book_data.get("author") or book_data.get(
@@ -77,11 +77,20 @@ def create_book_embed(book_data: dict[str, Any]) -> discord.Embed:
     slug = book_data.get("slug")
 
     links = []
+
+    # Always add Dungeon Books store search first
+    title_for_search = title.replace(" ", "%20")
+    dungeonbooks_url = f"https://www.dungeonbooks.com/s/search?q={title_for_search}"
+    links.append(f"[Check Our Store]({dungeonbooks_url})")
+
+    # Add Hardcover reviews link
     if slug:
         hardcover_url = f"https://hardcover.app/books/{slug}"
-        links.append(f"[Hardcover]({hardcover_url})")
-    if bookshop_link:
-        links.append(f"[Buy Book]({bookshop_link})")
+        links.append(f"[Details]({hardcover_url})")
+
+    # Only add bookshop link for books (not RPGs)
+    if bookshop_link and not is_rpg:
+        links.append(f"[Buy Online]({bookshop_link})")
 
     if links:
         embed.add_field(name="Links", value=" • ".join(links), inline=False)
@@ -263,6 +272,8 @@ class MartyBot(commands.Bot):
                     # Send response to Discord
                     await message.reply(ai_response)
                     logger.info(f"Sent Discord response to {username}")
+
+                    # TODO: Check if ai_response includes book data and send embed
 
         except Exception as e:
             logger.error(f"Error processing Discord message from {username}: {e}")
