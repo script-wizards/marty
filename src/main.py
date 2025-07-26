@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from alembic.config import Config as AlembicConfig
 from src.ai_client import ConversationMessage, generate_ai_response
 from src.database import (
     ConversationCreate,
@@ -20,7 +19,6 @@ from src.database import (
     close_db,
     create_conversation,
     create_customer,
-    engine,
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
@@ -204,31 +202,11 @@ async def health_check(
         }
 
         if include_migrations:
-            migration_status = "ok"
-            try:
-                alembic_cfg = AlembicConfig("alembic.ini")
-                from alembic.runtime.migration import MigrationContext
-                from alembic.script import ScriptDirectory
-
-                # Use sync connection from engine for migration check
-                if engine:
-                    sync_engine = engine.sync_engine
-                    with sync_engine.connect() as conn:
-                        migration_ctx = MigrationContext.configure(conn)
-                        current_rev = migration_ctx.get_current_revision()
-
-                    script_dir = ScriptDirectory.from_config(alembic_cfg)
-                    head_rev = script_dir.get_current_head()
-
-                    if current_rev != head_rev:
-                        migration_status = "pending"
-                else:
-                    migration_status = "unknown"
-            except Exception as e:
-                logger.debug(f"Could not check migration status: {e}")
-                migration_status = "unknown"
-
-            response["migrations"] = {"status": migration_status}
+            # Migration status is handled by Railway startup command
+            response["migrations"] = {
+                "status": "managed_by_railway",
+                "note": "Migrations run via 'alembic upgrade head' in Railway startCommand",
+            }
 
         return response
     except Exception as e:
