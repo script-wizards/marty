@@ -406,16 +406,17 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        logger.debug(f"Searching books: query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         search_result = result.get("search", {})
 
         # If we got book IDs, fetch detailed info for them
         book_ids = search_result.get("ids", [])
+
         if book_ids:
             # Limit to requested number of books
             book_ids = book_ids[:limit]
-            return await self._get_books_by_ids(book_ids)
+            books = await self._get_books_by_ids(book_ids)
+            return books
 
         return []
 
@@ -442,7 +443,6 @@ class HardcoverTool(BaseTool):
 
         variables = {"query": query, "limit": limit}
 
-        logger.debug(f"Searching books (raw): query={query}, limit={limit}")
         result = await self._execute_with_retry(search_query, variables)
         return result.get("search", {})
 
@@ -488,7 +488,6 @@ class HardcoverTool(BaseTool):
 
         variables = {"id": book_id}
 
-        logger.debug(f"Getting book details: id={book_id}")
         result = await self._execute_with_retry(query, variables)
         book = result.get("books_by_pk")
 
@@ -513,9 +512,6 @@ class HardcoverTool(BaseTool):
             if book.get("title"):
                 book["bookshop_link"] = generate_bookshop_search_link(
                     book["title"], book.get("author")
-                )
-                logger.debug(
-                    f"Generated search link for book: {book.get('title')} by {book.get('author', 'Unknown')}"
                 )
 
         return book
@@ -562,9 +558,6 @@ class HardcoverTool(BaseTool):
 
         variables = {"ids": book_ids}
 
-        logger.debug(
-            f"Getting books by IDs: ids={book_ids[:5]}{'...' if len(book_ids) > 5 else ''}"
-        )
         result = await self._execute_with_retry(query, variables)
         books = result.get("books", [])
 
@@ -590,9 +583,6 @@ class HardcoverTool(BaseTool):
             if title:
                 book["bookshop_link"] = generate_bookshop_search_link(
                     title, book.get("author")
-                )
-                logger.debug(
-                    f"Generated search link for book: {title} by {book.get('author', 'Unknown')}"
                 )
 
         return books
@@ -795,8 +785,6 @@ class HardcoverTool(BaseTool):
                 }
 
             hardcover_link = f"https://hardcover.app/books/{slug}"
-
-            logger.debug(f"Generated Hardcover link: {hardcover_link}")
 
             return {
                 "hardcover_link": hardcover_link,

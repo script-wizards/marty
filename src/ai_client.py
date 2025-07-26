@@ -151,6 +151,34 @@ async def generate_ai_response(
                     if tool:
                         try:
                             result = await tool.execute(**tool_input)
+
+                            # Log Hardcover API response details
+                            if tool_name == "hardcover_api" and result.success:
+                                action = tool_input.get("action", "unknown")
+                                query = tool_input.get("query", "")
+                                if isinstance(result.data, list):
+                                    books_info = []
+                                    for book in result.data:
+                                        if isinstance(book, dict):
+                                            title = book.get("title", "Unknown")
+                                            author = book.get("author", "Unknown")
+                                            year = book.get("release_year", "Unknown")
+                                            books_info.append(
+                                                f"{title} by {author} ({year})"
+                                            )
+                                    logger.info(
+                                        f"Hardcover {action} '{query}' returned: {'; '.join(books_info)}"
+                                    )
+
+                                elif isinstance(result.data, dict):
+                                    book = result.data
+                                    title = book.get("title", "Unknown")
+                                    author = book.get("author", "Unknown")
+                                    year = book.get("release_year", "Unknown")
+                                    logger.info(
+                                        f"Hardcover {action} returned: {title} by {author} ({year})"
+                                    )
+
                             tool_results.append(
                                 {
                                     "type": "tool_result",
@@ -220,7 +248,26 @@ async def generate_ai_response(
                     logger.debug(f"Final response text: {response_text[:100]}...")
                     return response_text, executed_tools
                 else:
-                    logger.error("Final response has no content")
+                    logger.warning(
+                        "Final response has no content, checking initial response for text"
+                    )
+
+                    # Check if the initial response had any text content alongside tool calls
+                    initial_text = ""
+                    for content_block in response.content:
+                        if (
+                            hasattr(content_block, "type")
+                            and content_block.type == "text"
+                        ):
+                            if hasattr(content_block, "text"):
+                                initial_text += content_block.text
+
+                    if initial_text.strip():
+                        logger.debug(
+                            f"Using text from initial response: {initial_text[:100]}..."
+                        )
+                        return initial_text.strip(), executed_tools
+
                     # Fallback: try to generate a response without tools
                     logger.debug("Attempting fallback response without tools")
                     fallback_response = await client.messages.create(

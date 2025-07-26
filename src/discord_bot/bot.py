@@ -40,29 +40,61 @@ def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discor
         color=0x8B4513,  # Saddle brown color for bookstore theme
     )
 
-    # Add book cover image if available
+    # Add book cover image if available (using set_image for larger size)
     image_url = (
         book_data.get("image", {}).get("url") if book_data.get("image") else None
     )
     if image_url:
-        embed.set_thumbnail(url=image_url)
+        embed.set_image(url=image_url)
 
     # Add book details as fields
     rating = book_data.get("rating")
+    ratings_count = book_data.get("ratings_count")
+
+    # Separate rating and ratings count for cleaner display
     if rating:
         embed.add_field(name="Rating", value=f"⭐ {rating:.1f}", inline=True)
 
     pages = book_data.get("pages")
-    if pages:
+    if pages and pages > 0:
         embed.add_field(name="Pages", value=str(pages), inline=True)
 
     release_year = book_data.get("release_year")
     if release_year:
         embed.add_field(name="Year", value=str(release_year), inline=True)
 
-    ratings_count = book_data.get("ratings_count")
     if ratings_count:
-        embed.add_field(name="Ratings", value=f"{ratings_count:,} readers", inline=True)
+        embed.add_field(name="Readers", value=f"{ratings_count:,}", inline=True)
+
+    # Add genre/mood tags if available
+    cached_tags = book_data.get("cached_tags")
+    if cached_tags and isinstance(cached_tags, dict):
+        # Extract genres (top 3)
+        genres = cached_tags.get("Genre", [])
+        if genres and isinstance(genres, list):
+            top_genres = [
+                genre.get("tag", "") for genre in genres[:3] if genre.get("tag")
+            ]
+            if top_genres:
+                embed.add_field(
+                    name="Genres", value=" • ".join(top_genres), inline=True
+                )
+
+        # Extract moods (top 2)
+        moods = cached_tags.get("Mood", [])
+        if moods and isinstance(moods, list):
+            top_moods = [mood.get("tag", "") for mood in moods[:2] if mood.get("tag")]
+            if top_moods:
+                embed.add_field(name="Mood", value=" • ".join(top_moods), inline=True)
+
+    # Add series/compilation info if available
+    compilation = book_data.get("compilation")
+    subtitle = book_data.get("subtitle", "")
+    if compilation and str(compilation).lower() not in ["none", "null", "false"]:
+        embed.add_field(name="Series", value=str(compilation), inline=True)
+    elif subtitle and "series" in subtitle.lower():
+        # If subtitle mentions series (like "The Murderbot Diaries"), show it
+        embed.add_field(name="Series", value=subtitle, inline=True)
 
     # Add description (truncated if too long)
     if description:
@@ -330,6 +362,17 @@ class MartyBot(commands.Bot):
                             logger.error(f"Failed to create thread: {thread_error}")
                             # Fallback to regular reply
                             await message.reply(ai_response)
+
+                            # Handle tool results in fallback case too
+                            try:
+                                await self._handle_tool_results(
+                                    tool_results, message.channel, username
+                                )
+                            except Exception as tool_error:
+                                logger.warning(
+                                    f"Failed to handle tool results in fallback: {tool_error}"
+                                )
+
                             logger.info(
                                 f"Sent Discord response to {username} (fallback)"
                             )
@@ -337,15 +380,15 @@ class MartyBot(commands.Bot):
                         # Already in thread or DM, reply normally
                         await message.reply(ai_response)
 
-                        # Handle tool results for existing threads
-                        if is_bot_thread:
+                        # Handle tool results for existing threads and DMs
+                        if is_bot_thread or isinstance(
+                            message.channel, discord.DMChannel
+                        ):
                             await self._handle_tool_results(
                                 tool_results, message.channel, username
                             )
 
                         logger.info(f"Sent Discord response to {username}")
-
-                    # TODO: Check if ai_response includes book data and send embed
 
         except Exception as e:
             logger.error(f"Error processing Discord message from {username}: {e}")
@@ -389,6 +432,48 @@ class MartyBot(commands.Bot):
                         logger.info(f"Renamed thread to '{thread_name}' for {username}")
                 except Exception as e:
                     logger.warning(f"Failed to rename thread: {e}")
+
+            elif tool_name == "hardcover_api" and result and result.success:
+                try:
+                    await self._send_book_embeds(tool_result, thread, username)
+                except Exception as e:
+                    logger.warning(f"Failed to send book embed: {e}")
+
+    async def _send_book_embeds(self, tool_result: dict, thread, username: str) -> None:
+        """Send book embeds for Hardcover API results."""
+        result = tool_result.get("result")
+        tool_input = tool_result.get("tool_input", {})
+        action = tool_input.get("action", "")
+
+        if not result or not result.success or not result.data:
+            return
+
+        # Handle different Hardcover actions that return book data
+        books_data = []
+
+        if action in ["search_books", "get_books_by_ids"]:
+            # These return a list of books
+            books_data = result.data if isinstance(result.data, list) else []
+        elif action == "get_book_by_id":
+            # This returns a single book
+            if isinstance(result.data, dict):
+                books_data = [result.data]
+
+        # Send embeds for books (limit to 3 to avoid spam)
+        for book_data in books_data[:3]:
+            if book_data and isinstance(book_data, dict):
+                try:
+                    embed = create_book_embed(book_data)
+                    await thread.send(embed=embed)
+                    logger.info(
+                        f"Sent book embed for '{book_data.get('title', 'Unknown')}' to {username}"
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating book embed: {e}")
+                    logger.debug(
+                        f"Book data that caused error: {book_data.get('cached_tags')} (type: {type(book_data.get('cached_tags'))})"
+                    )
+                    # Continue without the embed rather than failing completely
 
 
 def create_bot() -> MartyBot:
