@@ -87,6 +87,15 @@ def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discor
     if slug:
         hardcover_url = f"https://hardcover.app/books/{slug}"
         links.append(f"[Details]({hardcover_url})")
+        logger.debug(f"Added Hardcover link for '{title}': {hardcover_url}")
+    elif title:
+        # Fallback to search URL when slug is missing
+        search_query = title.replace(" ", "+").lower()
+        hardcover_url = f"https://hardcover.app/search?q={search_query}"
+        links.append(f"[Details]({hardcover_url})")
+        logger.debug(f"Added Hardcover search fallback for '{title}': {hardcover_url}")
+    else:
+        logger.warning("No slug or title found - cannot create Hardcover link")
 
     # Only add bookshop link for books (not RPGs)
     if bookshop_link and not is_rpg:
@@ -173,6 +182,16 @@ class MartyBot(commands.Bot):
         channel_id = str(message.channel.id)
         guild_id = str(message.guild.id) if message.guild else None
 
+        # If we're in a thread created by the bot, use parent channel for conversation lookup
+        is_bot_thread = (
+            hasattr(message.channel, "owner") and message.channel.owner == self.user
+        )
+
+        # For conversation lookup, use parent channel if in bot thread
+        conversation_channel_id = channel_id
+        if is_bot_thread and hasattr(message.channel, "parent"):
+            conversation_channel_id = str(message.channel.parent.id)
+
         logger.info(
             f"Processing Discord message from {username} ({user_id}): {user_message}"
         )
@@ -192,14 +211,18 @@ class MartyBot(commands.Bot):
                         logger.info(f"Created new customer for Discord user {username}")
 
                     # Get or create active conversation
+                    # Use parent channel ID for thread conversations to maintain history
                     conversation = await get_active_conversation(
-                        db, user_id, platform="discord", channel_id=channel_id
+                        db,
+                        user_id,
+                        platform="discord",
+                        channel_id=conversation_channel_id,
                     )
                     if not conversation:
                         conversation_data = ConversationCreate(
                             customer_id=customer.id,
                             discord_user_id=user_id,
-                            discord_channel_id=channel_id,
+                            discord_channel_id=conversation_channel_id,
                             discord_guild_id=guild_id,
                             platform="discord",
                             status="active",
