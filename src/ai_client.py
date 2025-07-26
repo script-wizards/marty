@@ -56,7 +56,7 @@ async def generate_ai_response(
     conversation_history: list[ConversationMessage],
     customer_context: dict | None = None,
     platform: str = "sms",
-) -> str:
+) -> tuple[str, list[dict]]:
     """
     Generate an AI response using Claude.
 
@@ -66,7 +66,7 @@ async def generate_ai_response(
         customer_context: Optional context about the customer
 
     Returns:
-        The AI-generated response
+        Tuple of (AI-generated response, list of tool results)
     """
     try:
         # Build the conversation history for Claude
@@ -135,6 +135,7 @@ async def generate_ai_response(
             logger.debug(f"Response content length: {len(response.content)}")
 
             tool_results = []
+            executed_tools = []  # Track tool executions for return
             messages.append({"role": "assistant", "content": response.content})
 
             # Execute any tool calls
@@ -157,6 +158,14 @@ async def generate_ai_response(
                                     "content": str(result.data)
                                     if result.success
                                     else f"Error: {result.error}",
+                                }
+                            )
+                            # Track executed tool for return
+                            executed_tools.append(
+                                {
+                                    "tool_name": tool_name,
+                                    "tool_input": tool_input,
+                                    "result": result,
                                 }
                             )
                         except Exception as e:
@@ -209,6 +218,7 @@ async def generate_ai_response(
                         response_text = str(content_block)
 
                     logger.debug(f"Final response text: {response_text[:100]}...")
+                    return response_text, executed_tools
                 else:
                     logger.error("Final response has no content")
                     # Fallback: try to generate a response without tools
@@ -231,6 +241,7 @@ async def generate_ai_response(
                         response_text = (
                             "I'm having trouble generating a response right now."
                         )
+                    return response_text, executed_tools
             else:
                 # No tools used, extract text directly
                 logger.debug("No tools used, extracting text directly")
@@ -253,12 +264,13 @@ async def generate_ai_response(
                     response_text = (
                         "I'm having trouble generating a response right now."
                     )
+                return response_text, []
         else:
             logger.error("Response has no content")
             response_text = "I'm having trouble generating a response right now."
 
-        return response_text
+        return response_text, []
 
     except Exception as e:
         logger.error(f"Error generating AI response: {e}")
-        return "Sorry, I'm having trouble thinking right now. Can you try again? 🤔"
+        return "Sorry, I'm having trouble thinking right now. Can you try again? 🤔", []

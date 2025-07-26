@@ -31,6 +31,13 @@ class ToolRegistry:
             # Tool dependencies might not be available in all environments
             print(f"Warning: Could not register HardcoverTool: {e}")
 
+        try:
+            from .discord.thread_rename import ThreadRenameTool
+
+            self.register(ThreadRenameTool)
+        except ImportError as e:
+            print(f"Warning: Could not register ThreadRenameTool: {e}")
+
     def register(self, tool_class: type[BaseTool]):
         """Register a tool class."""
         tool_instance = tool_class()

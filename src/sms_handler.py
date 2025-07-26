@@ -325,7 +325,7 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             }
 
             # Generate AI response
-            ai_response = await generate_ai_response(
+            ai_response, tool_results = await generate_ai_response(
                 user_message=user_message,
                 conversation_history=conversation_history,
                 customer_context=customer_context,

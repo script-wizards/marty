@@ -282,7 +282,7 @@ class MartyBot(commands.Bot):
                     }
 
                     # Generate AI response
-                    ai_response = await generate_ai_response(
+                    ai_response, tool_results = await generate_ai_response(
                         user_message=user_message,
                         conversation_history=conversation_history,
                         customer_context=customer_context,
@@ -312,6 +312,12 @@ class MartyBot(commands.Bot):
                         try:
                             thread = await message.create_thread(name="Chat with Marty")
                             await thread.send(ai_response)
+
+                            # Handle any tool results (like thread renaming)
+                            await self._handle_tool_results(
+                                tool_results, thread, username
+                            )
+
                             logger.info(
                                 f"Created thread and sent Discord response to {username}"
                             )
@@ -325,6 +331,13 @@ class MartyBot(commands.Bot):
                     else:
                         # Already in thread or DM, reply normally
                         await message.reply(ai_response)
+
+                        # Handle tool results for existing threads
+                        if is_bot_thread:
+                            await self._handle_tool_results(
+                                tool_results, message.channel, username
+                            )
+
                         logger.info(f"Sent Discord response to {username}")
 
                     # TODO: Check if ai_response includes book data and send embed
@@ -354,6 +367,23 @@ class MartyBot(commands.Bot):
                     await message.reply(error_message)
             except Exception as send_error:
                 logger.error(f"Failed to send error message: {send_error}")
+
+    async def _handle_tool_results(
+        self, tool_results: list[dict], thread, username: str
+    ) -> None:
+        """Handle tool results from AI response."""
+        for tool_result in tool_results:
+            tool_name = tool_result.get("tool_name")
+            result = tool_result.get("result")
+
+            if tool_name == "rename_thread" and result and result.success:
+                try:
+                    thread_name = result.data.get("thread_name")
+                    if thread_name and hasattr(thread, "edit"):
+                        await thread.edit(name=thread_name)
+                        logger.info(f"Renamed thread to '{thread_name}' for {username}")
+                except Exception as e:
+                    logger.warning(f"Failed to rename thread: {e}")
 
 
 def create_bot() -> MartyBot:

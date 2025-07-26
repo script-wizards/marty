@@ -273,7 +273,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         )
         await add_message(db, incoming_message)
 
-        response_text = await generate_ai_response(
+        response_text, tool_results = await generate_ai_response(
             user_message=request.message,
             conversation_history=conversation_history,
             customer_context={

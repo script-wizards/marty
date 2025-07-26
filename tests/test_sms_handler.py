@@ -560,7 +560,10 @@ class TestBackgroundTask:
             mock_create_conversation.return_value = mock_conversation
 
             mock_get_messages.return_value = []
-            mock_ai_response.return_value = "Here's a great sci-fi book recommendation!"
+            mock_ai_response.return_value = (
+                "Here's a great sci-fi book recommendation!",
+                [],
+            )
 
             yield (
                 mock_get_db_session,
