@@ -138,10 +138,16 @@ class MartyBot(commands.Bot):
             await self.process_commands(message)
             return
 
-        # Only respond to @ mentions or DMs
+        # Check if this is a message in a thread created by the bot
+        is_bot_thread = (
+            hasattr(message.channel, "owner") and message.channel.owner == self.user
+        )
+
+        # Only respond to @ mentions, DMs, or messages in bot's threads
         if not (
             self.user.mentioned_in(message)
             or isinstance(message.channel, discord.DMChannel)
+            or is_bot_thread
         ):
             return
 
@@ -270,8 +276,33 @@ class MartyBot(commands.Bot):
                     await add_message(db, response_message)
 
                     # Send response to Discord
-                    await message.reply(ai_response)
-                    logger.info(f"Sent Discord response to {username}")
+                    # Check if we need to create a thread for this conversation
+                    is_bot_thread = (
+                        hasattr(message.channel, "owner")
+                        and message.channel.owner == self.user
+                    )
+
+                    if not is_bot_thread and not isinstance(
+                        message.channel, discord.DMChannel
+                    ):
+                        # Create a thread for the conversation
+                        try:
+                            thread = await message.create_thread(name="Chat with Marty")
+                            await thread.send(ai_response)
+                            logger.info(
+                                f"Created thread and sent Discord response to {username}"
+                            )
+                        except Exception as thread_error:
+                            logger.error(f"Failed to create thread: {thread_error}")
+                            # Fallback to regular reply
+                            await message.reply(ai_response)
+                            logger.info(
+                                f"Sent Discord response to {username} (fallback)"
+                            )
+                    else:
+                        # Already in thread or DM, reply normally
+                        await message.reply(ai_response)
+                        logger.info(f"Sent Discord response to {username}")
 
                     # TODO: Check if ai_response includes book data and send embed
 
@@ -280,7 +311,24 @@ class MartyBot(commands.Bot):
             # Send error message in Marty's voice
             error_message = "sorry my brain's lagging, give me a moment"
             try:
-                await message.reply(error_message)
+                # Use same thread logic for error messages
+                is_bot_thread = (
+                    hasattr(message.channel, "owner")
+                    and message.channel.owner == self.user
+                )
+
+                if not is_bot_thread and not isinstance(
+                    message.channel, discord.DMChannel
+                ):
+                    # Try to create thread for error message too
+                    try:
+                        thread = await message.create_thread(name="Chat with Marty")
+                        await thread.send(error_message)
+                    except Exception:
+                        # Fallback to regular reply
+                        await message.reply(error_message)
+                else:
+                    await message.reply(error_message)
             except Exception as send_error:
                 logger.error(f"Failed to send error message: {send_error}")
 
