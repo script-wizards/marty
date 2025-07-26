@@ -160,14 +160,19 @@ class MartyBot(commands.Bot):
         ):
             return
 
-        # Check if user has Staff role (skip for DMs and dev environment)
+        # Check if user has Staff or Readers role (skip for DMs and dev environment)
         if not isinstance(message.channel, discord.DMChannel):
-            # Skip staff role check in development environment
+            # Skip role check in development environment
             if os.getenv("ENV") != "dev":
                 staff_role = discord.utils.get(message.guild.roles, name="Staff")
-                if not staff_role or staff_role not in message.author.roles:
+                readers_role = discord.utils.get(message.guild.roles, name="Readers")
+
+                has_staff = staff_role and staff_role in message.author.roles
+                has_readers = readers_role and readers_role in message.author.roles
+
+                if not (has_staff or has_readers):
                     await message.reply(
-                        "sorry, i'm only available to staff right now. ping `@nachi` if you need access."
+                        "sorry, i'm only available to staff and readers right now. ping `@nachi` if you need access."
                     )
                     return
 
