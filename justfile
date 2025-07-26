@@ -25,7 +25,7 @@ add-dev package:
     uv add --group dev {{package}}
 
 # Start development server with hot reload
-dev:
+dev: test-infra-up
     uv run fastapi dev src/main.py
 
 # Start production server
