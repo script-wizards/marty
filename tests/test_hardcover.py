@@ -276,14 +276,20 @@ class TestHardcoverToolBasics:
         self, hardcover_tool: HardcoverTool, mock_gql_session
     ):
         """Test getting trending books."""
-        mock_gql_session.execute.return_value = MOCK_TRENDING_RESPONSE
+        # Mock two calls: first for trending IDs, second for book details
+        mock_gql_session.execute.side_effect = [
+            MOCK_TRENDING_RESPONSE,  # First call to get trending book IDs
+            MOCK_BOOKS_RESPONSE,     # Second call to get book details
+        ]
 
         result = await hardcover_tool.execute(action="get_trending_books", limit=5)
 
         assert result.success is True
-        assert result.data == MOCK_TRENDING_RESPONSE["books_trending"]
         assert result.data["ids"] == [123, 456, 789]
-        mock_gql_session.execute.assert_called_once()
+        assert "books" in result.data
+        assert len(result.data["books"]) == 1  # MOCK_BOOKS_RESPONSE has 1 book
+        assert result.data["books"][0]["title"] == "The Python Handbook"
+        assert mock_gql_session.execute.call_count == 2
 
     @pytest.mark.asyncio
     async def test_introspect_schema_action(

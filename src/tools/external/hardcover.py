@@ -632,7 +632,7 @@ class HardcoverTool(BaseTool):
 
         query = gql(
             """
-            query GetTrendingBooks($from: String!, $to: String!, $limit: Int!, $offset: Int!) {
+            query GetTrendingBooks($from: date!, $to: date!, $limit: Int!, $offset: Int!) {
                 books_trending(from: $from, to: $to, limit: $limit, offset: $offset) {
                     error
                     ids
@@ -647,7 +647,26 @@ class HardcoverTool(BaseTool):
             f"Getting trending books: from={from_date}, to={to_date}, limit={limit}"
         )
         result = await self._execute_with_retry(query, variables)
-        return result.get("books_trending", {})
+        trending_result = result.get("books_trending", {})
+
+        logger.info(f"Raw trending books result: {trending_result}")
+
+        # If we got book IDs, also log them and fetch the books
+        book_ids = trending_result.get("ids", [])
+        if book_ids:
+            logger.info(f"Got trending book IDs: {book_ids}")
+            # Fetch the actual book data
+            books = await self._get_books_by_ids(book_ids[:limit])
+            logger.info(f"Fetched {len(books)} trending books with details")
+            for i, book in enumerate(books):
+                logger.info(
+                    f"Book {i + 1}: {book.get('title', 'No title')} by {book.get('author', 'No author')}"
+                )
+            trending_result["books"] = books
+        else:
+            logger.warning("No book IDs returned from trending books query")
+
+        return trending_result
 
     async def _get_current_user(self) -> dict[str, Any]:
         """Get current user information (test query)."""

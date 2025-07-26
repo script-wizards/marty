@@ -156,6 +156,7 @@ async def generate_ai_response(
                             if tool_name == "hardcover_api" and result.success:
                                 action = tool_input.get("action", "unknown")
                                 query = tool_input.get("query", "")
+
                                 if isinstance(result.data, list):
                                     books_info = []
                                     for book in result.data:
@@ -171,13 +172,35 @@ async def generate_ai_response(
                                     )
 
                                 elif isinstance(result.data, dict):
-                                    book = result.data
-                                    title = book.get("title", "Unknown")
-                                    author = book.get("author", "Unknown")
-                                    year = book.get("release_year", "Unknown")
-                                    logger.info(
-                                        f"Hardcover {action} returned: {title} by {author} ({year})"
-                                    )
+                                    # Handle trending books response which has books list nested inside
+                                    if (
+                                        action == "get_trending_books"
+                                        and "books" in result.data
+                                    ):
+                                        books = result.data.get("books", [])
+                                        books_info = []
+                                        for book in books:
+                                            if isinstance(book, dict):
+                                                title = book.get("title", "Unknown")
+                                                author = book.get("author", "Unknown")
+                                                year = book.get(
+                                                    "release_year", "Unknown"
+                                                )
+                                                books_info.append(
+                                                    f"{title} by {author} ({year})"
+                                                )
+                                        logger.info(
+                                            f"Hardcover {action} returned: {'; '.join(books_info) if books_info else 'No books found'}"
+                                        )
+                                    else:
+                                        # Handle single book response
+                                        book = result.data
+                                        title = book.get("title", "Unknown")
+                                        author = book.get("author", "Unknown")
+                                        year = book.get("release_year", "Unknown")
+                                        logger.info(
+                                            f"Hardcover {action} returned: {title} by {author} ({year})"
+                                        )
 
                             tool_results.append(
                                 {
