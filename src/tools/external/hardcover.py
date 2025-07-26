@@ -139,8 +139,8 @@ class HardcoverTool(BaseTool):
     def description(self) -> str:
         return (
             "Gets book details, ratings, and purchase links via Hardcover API. "
-            "Use when user asks about a specific book's rating or where to buy. "
-            "Supports book search, book details, and purchase link generation."
+            "Use when user asks about a specific book's rating, where to buy, or for Hardcover links. "
+            "Supports book search, book details, purchase link generation, and Hardcover.app link generation."
         )
 
     @property
@@ -158,6 +158,7 @@ class HardcoverTool(BaseTool):
                     "get_trending_books",
                     "get_current_user",
                     "introspect_schema",
+                    "generate_hardcover_link",
                 ],
             },
             "query": {
@@ -199,6 +200,8 @@ class HardcoverTool(BaseTool):
             return False
 
         if action in ["search_books", "search_books_raw"]:
+            return bool(kwargs.get("query"))
+        elif action == "generate_hardcover_link":
             return bool(kwargs.get("query"))
         elif action == "get_book_by_id":
             return bool(kwargs.get("book_id"))
@@ -290,6 +293,15 @@ class HardcoverTool(BaseTool):
             elif action == "introspect_schema":
                 data = await self._introspect_schema()
                 return ToolResult(success=True, data=data, metadata={"action": action})
+
+            elif action == "generate_hardcover_link":
+                query = kwargs["query"]
+                data = await self._generate_hardcover_link(query)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    metadata={"action": action, "query": query},
+                )
 
             else:
                 return ToolResult(
@@ -760,6 +772,51 @@ class HardcoverTool(BaseTool):
 
         logger.info("Introspecting GraphQL schema")
         return await self._execute_with_retry(introspection_query)
+
+    async def _generate_hardcover_link(self, query: str) -> dict[str, Any] | None:
+        """Generate a Hardcover.app link for a book by searching for it."""
+        try:
+            # Search for the book to get its slug
+            books = await self._search_books(query, limit=1)
+
+            if not books:
+                return {
+                    "error": f"No books found for query: {query}",
+                    "hardcover_link": None,
+                    "title": None,
+                    "author": None,
+                }
+
+            book = books[0]
+            slug = book.get("slug")
+
+            if not slug:
+                return {
+                    "error": f"No slug found for book: {book.get('title', 'Unknown')}",
+                    "hardcover_link": None,
+                    "title": book.get("title"),
+                    "author": book.get("author"),
+                }
+
+            hardcover_link = f"https://hardcover.app/books/{slug}"
+
+            logger.debug(f"Generated Hardcover link: {hardcover_link}")
+
+            return {
+                "hardcover_link": hardcover_link,
+                "title": book.get("title"),
+                "author": book.get("author"),
+                "slug": slug,
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating Hardcover link for query '{query}': {e}")
+            return {
+                "error": f"Failed to generate link: {str(e)}",
+                "hardcover_link": None,
+                "title": None,
+                "author": None,
+            }
 
     async def close(self) -> None:
         """Close the client connection."""
