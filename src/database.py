@@ -791,6 +791,145 @@ async def search_books(db: AsyncSession, query: str, limit: int = 10) -> list[Bo
         return []
 
 
+# Database Cleanup Functions
+async def cleanup_old_conversations(
+    db: AsyncSession, days_old: int = 30, keep_recent_messages: int = 5
+) -> tuple[int, int]:
+    """
+    Clean up old conversations and messages to prevent database clutter.
+
+    Args:
+        db: Database session
+        days_old: Delete conversations older than this many days
+        keep_recent_messages: Keep this many recent messages per conversation
+
+    Returns:
+        Tuple of (conversations_deleted, messages_deleted)
+    """
+    try:
+        from datetime import timedelta
+
+        from sqlalchemy import delete, select
+
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_old)
+
+        # Find old conversations
+        old_conversations_query = select(Conversation.id).where(
+            Conversation.created_at < cutoff_date
+        )
+        old_conversations_result = await db.execute(old_conversations_query)
+        old_conversation_ids = [row[0] for row in old_conversations_result.fetchall()]
+
+        messages_deleted = 0
+        conversations_deleted = 0
+
+        if old_conversation_ids:
+            # Delete messages from old conversations (keep some recent ones)
+            for conv_id in old_conversation_ids:
+                # Get messages to keep (most recent ones)
+                recent_messages_query = (
+                    select(Message.id)
+                    .where(Message.conversation_id == conv_id)
+                    .order_by(Message.timestamp.desc())
+                    .limit(keep_recent_messages)
+                )
+                recent_result = await db.execute(recent_messages_query)
+                keep_message_ids = [row[0] for row in recent_result.fetchall()]
+
+                # Delete old messages (not in keep list)
+                if keep_message_ids:
+                    delete_messages_query = delete(Message).where(
+                        Message.conversation_id == conv_id,
+                        Message.id.notin_(keep_message_ids),
+                    )
+                else:
+                    delete_messages_query = delete(Message).where(
+                        Message.conversation_id == conv_id
+                    )
+
+                result = await db.execute(delete_messages_query)
+                messages_deleted += result.rowcount
+
+            # Delete old conversations
+            delete_conversations_query = delete(Conversation).where(
+                Conversation.id.in_(old_conversation_ids)
+            )
+            result = await db.execute(delete_conversations_query)
+            conversations_deleted = result.rowcount
+
+        await db.commit()
+
+        logger.info(
+            f"Cleanup completed: {conversations_deleted} conversations and "
+            f"{messages_deleted} messages deleted (older than {days_old} days)"
+        )
+
+        return conversations_deleted, messages_deleted
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error during conversation cleanup: {e}")
+        raise e
+
+
+async def cleanup_expired_rate_limits(db: AsyncSession) -> int:
+    """Clean up expired rate limit records."""
+    try:
+        from sqlalchemy import delete
+
+        # Delete expired rate limits
+        delete_query = delete(RateLimit).where(RateLimit.expires_at < datetime.now(UTC))
+        result = await db.execute(delete_query)
+        deleted_count = result.rowcount
+
+        await db.commit()
+
+        logger.info(f"Cleaned up {deleted_count} expired rate limit records")
+        return deleted_count
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error during rate limit cleanup: {e}")
+        raise e
+
+
+async def cleanup_database(
+    db: AsyncSession, conversation_days_old: int = 30, keep_recent_messages: int = 5
+) -> dict[str, int]:
+    """
+    Perform comprehensive database cleanup.
+
+    Args:
+        db: Database session
+        conversation_days_old: Delete conversations older than this many days
+        keep_recent_messages: Keep this many recent messages per conversation
+
+    Returns:
+        Dict with cleanup statistics
+    """
+    try:
+        # Cleanup conversations and messages
+        conversations_deleted, messages_deleted = await cleanup_old_conversations(
+            db, conversation_days_old, keep_recent_messages
+        )
+
+        # Cleanup expired rate limits
+        rate_limits_deleted = await cleanup_expired_rate_limits(db)
+
+        stats = {
+            "conversations_deleted": conversations_deleted,
+            "messages_deleted": messages_deleted,
+            "rate_limits_deleted": rate_limits_deleted,
+        }
+
+        logger.info(f"Database cleanup completed: {stats}")
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error during database cleanup: {e}")
+        raise e
+
+
 # Main function for testing
 async def main():
     """Test database connection and setup."""
