@@ -30,13 +30,9 @@ logger = structlog.get_logger(__name__)
 def generate_bookshop_search_link(
     title: str, author: str | None = None, our_affiliate_id: str = "108216"
 ) -> str:
-    """Generate a bookshop.org search link with our affiliate ID using title and author."""
-    # Combine title and author for better search results
-    search_terms = [title]
-    if author:
-        search_terms.append(author)
-
-    search_query = " ".join(search_terms).replace(" ", "+")
+    """Generate a bookshop.org search link with our affiliate ID using just the title."""
+    # Just use title for better search results - authors often hurt search accuracy
+    search_query = title.replace(" ", "+")
     return f"https://bookshop.org/search?keywords={search_query}&affiliate={our_affiliate_id}"
 
 
