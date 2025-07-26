@@ -117,13 +117,13 @@ def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discor
 
     # Add Hardcover reviews link
     if slug:
-        hardcover_url = f"https://hardcover.app/books/{slug}"
+        hardcover_url = f"https://hardcover.app/books/{slug}?referrer_id=148"
         links.append(f"[Details]({hardcover_url})")
         logger.debug(f"Added Hardcover link for '{title}': {hardcover_url}")
     elif title:
         # Fallback to search URL when slug is missing
         search_query = title.replace(" ", "+").lower()
-        hardcover_url = f"https://hardcover.app/search?q={search_query}"
+        hardcover_url = f"https://hardcover.app/search?q={search_query}?referrer_id=148"
         links.append(f"[Details]({hardcover_url})")
         logger.debug(f"Added Hardcover search fallback for '{title}': {hardcover_url}")
     else:

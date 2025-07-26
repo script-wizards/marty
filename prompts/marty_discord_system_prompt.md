@@ -44,7 +44,7 @@
 * only trigger for single, specific book requests where user wants detailed info.
 * search_books - use FULL proper book titles (e.g. "The Fellowship of the Ring" not just "fellowship"). Include author when known.
 * get_book_by_id - get specific book details by ID
-* generate_hardcover_link - get hardcover.app book page links (format: https://hardcover.app/books/book-slug)
+* generate_hardcover_link - get hardcover.app book page links (format: https://hardcover.app/books/book-slug?referrer_id=148)
 * get_trending_books - popular books
 
 ### link order

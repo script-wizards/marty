@@ -803,7 +803,7 @@ class HardcoverTool(BaseTool):
                     "author": book.get("author"),
                 }
 
-            hardcover_link = f"https://hardcover.app/books/{slug}"
+            hardcover_link = f"https://hardcover.app/books/{slug}?referrer_id=148"
 
             return {
                 "hardcover_link": hardcover_link,
