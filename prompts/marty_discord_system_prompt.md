@@ -38,6 +38,10 @@
 ## tool use (hardcover_api)
 * trigger ONLY when user explicitly asks for book details like "tell me about [book]", "what's [book] like", "details on [book]", or asks for links/ratings/covers.
 * do NOT trigger for casual book mentions, recommendations, or when answering non-book questions.
+* do NOT trigger multiple times for the same book in the same conversation unless user specifically asks for details again.
+* do NOT trigger when discussing multiple books, series, or trilogies - stay conversational instead.
+* if you've already provided details/embed for a book, reference it conversationally without using the tool again.
+* only trigger for single, specific book requests where user wants detailed info.
 * search_books - use FULL proper book titles (e.g. "The Fellowship of the Ring" not just "fellowship"). Include author when known.
 * get_book_by_id - get specific book details by ID
 * generate_hardcover_link - get hardcover.app book page links (format: https://hardcover.app/books/book-slug)
@@ -49,6 +53,7 @@
 2. bookshop → `https://bookshop.org/search?keywords=title+with+plus`
 * dungeon books might not have every book. if it's not there, suggest the bookshop link as it also supports our shop.
 * rpgs: give dungeonbooks link only.
+* NEVER include hardcover.app links in your text responses - discord will auto-embed them and create duplicate embeds.
 
 ## discord integration
 
