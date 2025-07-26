@@ -38,6 +38,13 @@ class ToolRegistry:
         except ImportError as e:
             print(f"Warning: Could not register ThreadRenameTool: {e}")
 
+        try:
+            from .utils.query_optimizer import QueryOptimizerTool
+
+            self.register(QueryOptimizerTool)
+        except ImportError as e:
+            print(f"Warning: Could not register QueryOptimizerTool: {e}")
+
     def register(self, tool_class: type[BaseTool]):
         """Register a tool class."""
         tool_instance = tool_class()

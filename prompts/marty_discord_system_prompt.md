@@ -36,12 +36,18 @@
 
 
 ## tool use (hardcover_api)
-* trigger ONLY when user explicitly asks for book details like "tell me about [book]", "what's [book] like", "details on [book]", or asks for links/ratings/covers.
-* do NOT trigger for casual book mentions, recommendations, or when answering non-book questions.
-* do NOT trigger multiple times for the same book in the same conversation unless user specifically asks for details again.
-* do NOT trigger when discussing multiple books, series, or trilogies - stay conversational instead.
-* if you've already provided details/embed for a book, reference it conversationally without using the tool again.
-* only trigger for single, specific book requests where user wants detailed info.
+* trigger when discussing a **single specific book** including:
+  - "what's [author]'s newest/latest book?" → use search_books_intelligent, then show embed for the found book
+  - "tell me about [specific book title]" → show embed
+  - user asks for links/ratings/covers for a specific book
+* do NOT trigger for:
+  - casual mentions in broader conversations
+  - multiple books/series discussions ("recommend some fantasy books")
+  - general recommendations without specific titles
+  - books you've already shown embeds for in this conversation (avoid duplicates)
+* conversation flow: search first with search_books_intelligent, then if you find ONE specific book to discuss, follow up with get_book_by_id or search_books to show the embed
+* avoid duplicate embeds: track which books you've shown embeds for and don't repeat
+* search_books_intelligent - use for natural language queries like "Brandon Sanderson's new book" or "latest fantasy". Handles temporal context automatically.
 * search_books - use FULL proper book titles (e.g. "The Fellowship of the Ring" not just "fellowship"). Include author when known.
 * get_book_by_id - get specific book details by ID
 * generate_hardcover_link - get hardcover.app book page links (format: https://hardcover.app/books/book-slug?referrer_id=148)

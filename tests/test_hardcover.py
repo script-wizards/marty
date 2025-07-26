@@ -355,3 +355,296 @@ class TestHardcoverToolBasics:
                 HardcoverAuthError, match="Hardcover API token not configured"
             ):
                 HardcoverTool()
+
+    @pytest.mark.asyncio
+    async def test_search_books_intelligent_action(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test intelligent book search with Claude optimization."""
+        # Mock the QueryOptimizerTool response for a temporal query
+        mock_optimization = {
+            "pattern": "AUTHOR_QUERY",
+            "query_terms": "Cassandra Khaw",
+            "sort_by": "release_date:desc",  # Recent because "new" keyword present
+            "author": "Cassandra Khaw",
+            "title": None,
+            "genre": None,
+            "temporal_indicators": ["new"],
+            "confidence": 0.9,
+            "intent": "Find recent books by Cassandra Khaw",
+            "search_strategy": "prioritize recent releases by author",
+            "limit": 5,
+        }
+
+        # Mock recent releases response
+        mock_recent_books = [
+            {
+                "id": 12345,
+                "title": "The Library at Hellebore",
+                "author": "Cassandra Khaw",
+                "release_year": 2024,
+                "cached_contributors": "Cassandra Khaw",
+                "description": "A dark fantasy novel",
+                "rating": 4.2,
+            }
+        ]
+
+        with patch(
+            "src.tools.utils.query_optimizer.QueryOptimizerTool"
+        ) as mock_optimizer_class:
+            mock_optimizer = AsyncMock()
+            mock_optimizer.execute.return_value = type(
+                "ToolResult", (), {"success": True, "data": mock_optimization}
+            )()
+            mock_optimizer_class.return_value = mock_optimizer
+
+            # Mock the _get_recent_releases_extended method to return our test data
+            with (
+                patch.object(
+                    hardcover_tool,
+                    "_get_recent_releases_extended",
+                    new_callable=AsyncMock,
+                    return_value=mock_recent_books,
+                ),
+                patch.object(
+                    hardcover_tool,
+                    "_search_author_books_by_recency",
+                    new_callable=AsyncMock,
+                    return_value=[],
+                ),
+                patch.object(
+                    hardcover_tool,
+                    "_search_books_optimized",
+                    new_callable=AsyncMock,
+                    return_value=[],
+                ),
+                patch.object(
+                    hardcover_tool,
+                    "_search_books",
+                    new_callable=AsyncMock,
+                    return_value=[],
+                ),
+            ):
+                result = await hardcover_tool.execute(
+                    action="search_books_intelligent",
+                    query="Cassandra Khaw's new book",
+                    limit=5,
+                )
+
+                assert result.success is True
+                assert len(result.data) >= 1
+                assert result.data[0]["title"] == "The Library at Hellebore"
+                assert result.data[0]["author"] == "Cassandra Khaw"
+                assert result.data[0]["release_year"] == 2024
+
+                # Verify optimizer was called
+                mock_optimizer.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_search_books_intelligent_fallback(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test intelligent search fallback when optimization fails."""
+        # Mock search response for fallback
+        mock_gql_session.execute.side_effect = [
+            MOCK_SEARCH_RESPONSE,  # Search for book IDs
+            MOCK_BOOKS_RESPONSE,  # Get book details
+        ]
+
+        with patch(
+            "src.tools.utils.query_optimizer.QueryOptimizerTool"
+        ) as mock_optimizer_class:
+            mock_optimizer = AsyncMock()
+            mock_optimizer.execute.return_value = type(
+                "ToolResult", (), {"success": False, "error": "Claude API error"}
+            )()
+            mock_optimizer_class.return_value = mock_optimizer
+
+            result = await hardcover_tool.execute(
+                action="search_books_intelligent", query="some book query", limit=5
+            )
+
+            # Should fallback to standard search and still succeed
+            assert result.success is True
+            assert len(result.data) >= 1
+
+    @pytest.mark.asyncio
+    async def test_search_books_intelligent_popular_author(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test intelligent search for popular books by author (bare author name)."""
+        # Mock optimization for popular author query (no temporal keywords)
+        mock_optimization = {
+            "pattern": "AUTHOR_QUERY",
+            "query_terms": "Brandon Sanderson",
+            "sort_by": "activities_count:desc",  # Popular because no temporal keywords
+            "author": "Brandon Sanderson",
+            "title": None,
+            "genre": None,
+            "temporal_indicators": [],
+            "confidence": 0.8,
+            "intent": "Find popular books by Brandon Sanderson",
+            "search_strategy": "prioritize popular works by author",
+            "limit": 5,
+        }
+
+        # Mock popular books response
+        mock_popular_books = [
+            {
+                "id": 1,
+                "title": "Mistborn: The Final Empire",
+                "author": "Brandon Sanderson",
+                "release_year": 2006,
+                "rating": 4.4,
+                "cached_contributors": "Brandon Sanderson",
+            }
+        ]
+
+        with patch(
+            "src.tools.utils.query_optimizer.QueryOptimizerTool"
+        ) as mock_optimizer_class:
+            mock_optimizer = AsyncMock()
+            mock_optimizer.execute.return_value = type(
+                "ToolResult", (), {"success": True, "data": mock_optimization}
+            )()
+            mock_optimizer_class.return_value = mock_optimizer
+
+            # Mock the _search_books_optimized method
+            with patch.object(
+                hardcover_tool,
+                "_search_books_optimized",
+                return_value=mock_popular_books,
+            ):
+                result = await hardcover_tool.execute(
+                    action="search_books_intelligent",
+                    query="Brandon Sanderson",
+                    limit=5,
+                )
+
+                assert result.success is True
+                assert len(result.data) >= 1
+                assert result.data[0]["title"] == "Mistborn: The Final Empire"
+                assert result.data[0]["author"] == "Brandon Sanderson"
+
+    @pytest.mark.asyncio
+    async def test_search_recent_releases_by_author(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test searching recent releases by specific author."""
+        mock_recent_books = [
+            {
+                "id": 1,
+                "title": "The Library at Hellebore",
+                "author": "Cassandra Khaw",
+                "release_year": 2024,
+                "cached_contributors": "Cassandra Khaw",
+            },
+            {
+                "id": 2,
+                "title": "Different Author Book",
+                "author": "Someone Else",
+                "release_year": 2024,
+                "cached_contributors": "Someone Else",
+            },
+            {
+                "id": 3,
+                "title": "The Salt Grows Heavy",
+                "author": "Cassandra Khaw",
+                "release_year": 2023,
+                "cached_contributors": "Cassandra Khaw",
+            },
+        ]
+
+        with (
+            patch.object(
+                hardcover_tool,
+                "_get_recent_releases_extended",
+                new_callable=AsyncMock,
+                return_value=mock_recent_books,
+            ),
+            patch.object(
+                hardcover_tool,
+                "_search_author_books_by_recency",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            result = await hardcover_tool._search_recent_releases_by_author(
+                "Cassandra Khaw", 5
+            )
+
+            # Should only return Cassandra Khaw's books
+            assert len(result) == 2
+            assert all(
+                "Cassandra Khaw" in book.get("author", "")
+                or "Cassandra Khaw" in book.get("cached_contributors", "")
+                for book in result
+            )
+            assert result[0]["title"] == "The Library at Hellebore"
+            assert result[1]["title"] == "The Salt Grows Heavy"
+
+    @pytest.mark.asyncio
+    async def test_search_author_books_by_recency(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test searching author's books sorted by recency."""
+        mock_author_books = [
+            {
+                "id": 1,
+                "title": "Old Book",
+                "author": "Test Author",
+                "release_year": 2020,
+            },
+            {
+                "id": 2,
+                "title": "Newer Book",
+                "author": "Test Author",
+                "release_year": 2023,
+            },
+            {
+                "id": 3,
+                "title": "Newest Book",
+                "author": "Test Author",
+                "release_year": 2024,
+            },
+        ]
+
+        with patch.object(
+            hardcover_tool, "_search_books", return_value=mock_author_books
+        ):
+            result = await hardcover_tool._search_author_books_by_recency(
+                "Test Author", 5
+            )
+
+            # Should be sorted by release year descending
+            assert len(result) == 3
+            assert result[0]["title"] == "Newest Book"
+            assert result[0]["release_year"] == 2024
+            assert result[1]["title"] == "Newer Book"
+            assert result[1]["release_year"] == 2023
+            assert result[2]["title"] == "Old Book"
+            assert result[2]["release_year"] == 2020
+
+    @pytest.mark.asyncio
+    async def test_search_books_optimized(
+        self, hardcover_tool: HardcoverTool, mock_gql_session
+    ):
+        """Test optimized search with custom sort parameters."""
+        mock_gql_session.execute.side_effect = [
+            MOCK_SEARCH_RESPONSE,  # Search with custom sort
+            MOCK_BOOKS_RESPONSE,  # Get book details
+        ]
+
+        result = await hardcover_tool._search_books_optimized(
+            "fantasy books", "release_date:desc", 5
+        )
+
+        assert len(result) >= 1
+        assert result[0]["title"] == "The Python Handbook"
+
+        # Verify the GraphQL query was called with custom sort
+        assert mock_gql_session.execute.call_count == 2
+        # Check that the sort parameter was passed correctly
+        call_args = mock_gql_session.execute.call_args_list[0]
+        variables = call_args[1]["variable_values"]
+        assert variables["sort"] == "release_date:desc"
