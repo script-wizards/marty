@@ -515,6 +515,94 @@ def create_bot() -> MartyBot:
             logger.error(f"Error in book command: {e}")
             await ctx.send("search spell malfunctioned, try that again")
 
+    @bot.command()
+    async def recent(ctx: commands.Context) -> None:
+        """Show recent book releases using Hardcover API."""
+        if not bot.hardcover:
+            await ctx.send("search spell's broken rn, try again later")
+            return
+
+        try:
+            async with ctx.typing():
+                # Get 9 recent releases
+                result = await bot.hardcover.execute(
+                    action="get_recent_releases", limit=9
+                )
+
+                if not result.success or not result.data:
+                    await ctx.send(
+                        "couldn't find any recent releases right now, try again later"
+                    )
+                    return
+
+                books = result.data
+                if not books:
+                    await ctx.send("no recent releases found, that's weird")
+                    return
+
+                # Create grid embed with 3 columns
+                embed = discord.Embed(
+                    title="📚 Recent Releases",
+                    color=0x8B4513,  # Saddle brown
+                )
+
+                # Split books into 3 columns
+                columns = [[], [], []]
+                for i, book in enumerate(books):
+                    column_index = i % 3
+                    columns[column_index].append(book)
+
+                # Add fields for each column
+                for _, column_books in enumerate(columns):
+                    if not column_books:
+                        continue
+
+                    column_text = ""
+                    for book in column_books:
+                        title = book.get("title", "Unknown Title")
+                        author = book.get("author", "Unknown Author")
+                        rating = book.get("rating")
+                        readers = book.get("users_count", 0)
+
+                        # Truncate title if too long
+                        if len(title) > 25:
+                            title = title[:22] + "..."
+                        if len(author) > 20:
+                            author = author[:17] + "..."
+
+                        # Format rating
+                        rating_str = f"⭐{rating:.1f}" if rating else "New"
+
+                        # Format readers count
+                        if readers >= 1000:
+                            readers_str = f"{readers // 1000}k readers"
+                        elif readers > 0:
+                            readers_str = f"{readers} readers"
+                        else:
+                            readers_str = "New release"
+
+                        column_text += (
+                            f"**{title}**\n*{author}*\n{rating_str} • {readers_str}\n\n"
+                        )
+
+                    # Add column as field (no titles, just invisible spacing)
+                    embed.add_field(
+                        name="\u200b", value=column_text.strip(), inline=True
+                    )
+
+                # Add footer
+                embed.set_footer(text="📚 Dungeon Books • Powered by Hardcover API")
+
+                await ctx.send(embed=embed)
+
+                logger.info(
+                    f"Sent recent releases grid with {len(books)} books in response to !recent command"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in recent command: {e}")
+            await ctx.send("recent releases spell malfunctioned, try that again")
+
     @bot.tree.command(
         name="book", description="Search for a book and get detailed information"
     )
@@ -567,6 +655,107 @@ def create_bot() -> MartyBot:
                 logger.error(f"Failed to send error message: {e}")
                 await interaction.edit_original_response(
                     content="search spell malfunctioned, try that again"
+                )
+
+    @bot.tree.command(
+        name="recent", description="Show the 9 most recent book releases in a grid"
+    )
+    async def recent_slash(interaction: discord.Interaction) -> None:
+        """Slash command to show recent book releases in a grid format."""
+        if not bot.hardcover:
+            await interaction.response.send_message(
+                "search spell's broken rn, try again later", ephemeral=True
+            )
+            return
+
+        try:
+            # Defer the response since API calls might take time
+            await interaction.response.defer()
+
+            # Get 9 recent releases
+            result = await bot.hardcover.execute(action="get_recent_releases", limit=9)
+
+            if not result.success or not result.data:
+                await interaction.followup.send(
+                    "couldn't find any recent releases right now, try again later"
+                )
+                return
+
+            books = result.data
+            if not books:
+                await interaction.followup.send(
+                    "no recent releases found, that's weird"
+                )
+                return
+
+            # Create grid embed with 3 columns
+            embed = discord.Embed(
+                title="📚 Recent Releases",
+                color=0x8B4513,  # Saddle brown
+            )
+
+            # Split books into 3 columns (3 books each)
+            columns = [[], [], []]
+            for i, book in enumerate(books):
+                column_index = i % 3
+                columns[column_index].append(book)
+
+            # Add fields for each column
+            for _, column_books in enumerate(columns):
+                if not column_books:
+                    continue
+
+                column_text = ""
+                for book in column_books:
+                    title = book.get("title", "Unknown Title")
+                    author = book.get("author", "Unknown Author")
+                    rating = book.get("rating")
+                    readers = book.get("users_count", 0)
+
+                    # Truncate title if too long
+                    if len(title) > 25:
+                        title = title[:22] + "..."
+                    if len(author) > 20:
+                        author = author[:17] + "..."
+
+                    # Format rating
+                    rating_str = f"⭐{rating:.1f}" if rating else "New"
+
+                    # Format readers count
+                    if readers >= 1000:
+                        readers_str = f"{readers // 1000}k readers"
+                    elif readers > 0:
+                        readers_str = f"{readers} readers"
+                    else:
+                        readers_str = "New release"
+
+                    column_text += (
+                        f"**{title}**\n*{author}*\n{rating_str} • {readers_str}\n\n"
+                    )
+
+                # Add column as field (no titles, just invisible spacing)
+                embed.add_field(name="\u200b", value=column_text.strip(), inline=True)
+
+            # Add footer
+            embed.set_footer(text="📚 Dungeon Books • Powered by Hardcover API")
+
+            await interaction.followup.send(embed=embed)
+
+            logger.info(
+                f"Sent recent releases grid with {len(books)} books in response to /recent slash command"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in recent slash command: {e}")
+            try:
+                await interaction.followup.send(
+                    "recent releases spell malfunctioned, try that again"
+                )
+            except Exception as e:
+                # If followup fails, try editing the original response
+                logger.error(f"Failed to send error message: {e}")
+                await interaction.edit_original_response(
+                    content="recent releases spell malfunctioned, try that again"
                 )
 
     return bot

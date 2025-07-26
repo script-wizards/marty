@@ -46,7 +46,7 @@
 * get_book_by_id - get specific book details by ID
 * generate_hardcover_link - get hardcover.app book page links (format: https://hardcover.app/books/book-slug?referrer_id=148)
 * get_trending_books - popular books
-* get_recent_releases - recently released books (last 1 month), sorted by reader count. present as numbered list with title, author, year, and short description for easy scanning.
+* get_recent_releases - recently released books (last 1 month), sorted by reader count. always request limit=10. present as condensed numbered list with title, author, year - no extra spacing between entries.
 
 ### link order
 
