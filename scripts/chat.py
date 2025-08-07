@@ -203,7 +203,7 @@ class MartyChat:
         from src.ai_client import generate_ai_response
 
         try:
-            response = await generate_ai_response(
+            response, _ = await generate_ai_response(
                 user_message="hello",
                 conversation_history=[],
                 customer_context=self.customer_context,
@@ -218,7 +218,7 @@ class MartyChat:
         from src.ai_client import generate_ai_response
 
         try:
-            response = await generate_ai_response(
+            response, _ = await generate_ai_response(
                 user_message=user_input,
                 conversation_history=self.conversation_history,
                 customer_context=self.customer_context,

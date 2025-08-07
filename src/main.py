@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from alembic.config import Config as AlembicConfig
 from src.ai_client import ConversationMessage, generate_ai_response
 from src.database import (
     ConversationCreate,
@@ -20,13 +19,13 @@ from src.database import (
     close_db,
     create_conversation,
     create_customer,
-    engine,
     get_active_conversation,
     get_conversation_messages,
     get_customer_by_phone,
     get_db,
     init_db,
 )
+from src.discord_bot.bot import create_bot
 from src.sms_handler import router as sms_router
 
 
@@ -52,10 +51,15 @@ structlog.configure(
 )
 
 # Configure standard logging to work with structlog
+# Set to WARNING to reduce Hardcover API noise
 logging.basicConfig(
     format="%(message)s",
-    level=logging.INFO,
+    level=logging.WARNING,
 )
+
+# But keep our app logs at INFO level
+logging.getLogger("src").setLevel(logging.INFO)
+logging.getLogger(__name__).setLevel(logging.INFO)
 
 logger = structlog.get_logger(__name__)
 
@@ -86,7 +90,7 @@ def validate_environment_variables() -> None:
             f"Missing required environment variables: {', '.join(missing_vars)}"
         )
 
-    logger.info(f"Environment: {os.getenv('ENV', 'development')}")
+    logger.info(f"Environment: {os.getenv('ENV', 'dev')}")
     logger.info(f"Database URL configured: {bool(os.getenv('DATABASE_URL'))}")
     logger.info(f"Anthropic API key configured: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
     logger.info(
@@ -99,12 +103,31 @@ def validate_environment_variables() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan (startup and shutdown)."""
+    discord_bot = None
+    discord_task = None
     try:
         validate_environment_variables()
         logger.info("Environment variables validated")
 
         await init_db()
         logger.info("Database initialized successfully")
+
+        # Start Discord bot if token is configured
+        discord_token = os.getenv("DISCORD_BOT_TOKEN")
+        if discord_token:
+            discord_bot = create_bot()
+            # Start Discord bot in background task and keep reference
+            import asyncio
+
+            discord_task = asyncio.create_task(discord_bot.start(discord_token))
+            logger.info("Discord bot started successfully")
+
+            # Give the bot a moment to connect
+            await asyncio.sleep(1)
+        else:
+            logger.info(
+                "Discord bot token not configured, skipping Discord bot startup"
+            )
 
         logger.info("Marty chatbot started successfully")
     except Exception as e:
@@ -115,6 +138,19 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("Shutting down Marty chatbot...")
+
+        # Shutdown Discord bot if running
+        if discord_bot and not discord_bot.is_closed():
+            await discord_bot.close()
+            logger.info("Discord bot shutdown initiated")
+
+        # Cancel the Discord task
+        if discord_task and not discord_task.done():
+            discord_task.cancel()
+            try:
+                await discord_task
+            except asyncio.CancelledError:
+                logger.info("Discord bot task cancelled")
 
         await close_db()
 
@@ -162,35 +198,15 @@ async def health_check(
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "0.1.0",
             "database": {"status": db_status, "type": db_type},
-            "environment": os.getenv("ENV", "development"),
+            "environment": os.getenv("ENV", "dev"),
         }
 
         if include_migrations:
-            migration_status = "ok"
-            try:
-                alembic_cfg = AlembicConfig("alembic.ini")
-                from alembic.runtime.migration import MigrationContext
-                from alembic.script import ScriptDirectory
-
-                # Use sync connection from engine for migration check
-                if engine:
-                    sync_engine = engine.sync_engine
-                    with sync_engine.connect() as conn:
-                        migration_ctx = MigrationContext.configure(conn)
-                        current_rev = migration_ctx.get_current_revision()
-
-                    script_dir = ScriptDirectory.from_config(alembic_cfg)
-                    head_rev = script_dir.get_current_head()
-
-                    if current_rev != head_rev:
-                        migration_status = "pending"
-                else:
-                    migration_status = "unknown"
-            except Exception as e:
-                logger.debug(f"Could not check migration status: {e}")
-                migration_status = "unknown"
-
-            response["migrations"] = {"status": migration_status}
+            # Migration status is handled by Railway startup command
+            response["migrations"] = {
+                "status": "managed_by_railway",
+                "note": "Migrations run via 'alembic upgrade head' in Railway startCommand",
+            }
 
         return response
     except Exception as e:
@@ -238,13 +254,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             conversation = await create_conversation(db, conversation_data)
 
-        incoming_message = MessageCreate(
-            conversation_id=conversation.id,
-            direction="inbound",
-            content=request.message,
-        )
-        await add_message(db, incoming_message)
-
+        # Get conversation history FIRST (before saving new message)
         messages = await get_conversation_messages(db, conversation.id, limit=10)
         conversation_history = [
             ConversationMessage(
@@ -255,11 +265,17 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             for msg in reversed(messages)  # Reverse to get chronological order
         ]
 
-        response_text = await generate_ai_response(
+        # Save the incoming message AFTER getting history
+        incoming_message = MessageCreate(
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=request.message,
+        )
+        await add_message(db, incoming_message)
+
+        response_text, tool_results = await generate_ai_response(
             user_message=request.message,
-            conversation_history=conversation_history[
-                :-1
-            ],  # Exclude the message we just added
+            conversation_history=conversation_history,
             customer_context={
                 "customer_id": customer.id,
                 "phone": customer.phone,
@@ -296,7 +312,7 @@ if __name__ == "__main__":
     config = Config()
     port = int(os.getenv("PORT", "8000"))
     config.bind = [f"[::]:{port}"]  # Dual-stack IPv4/IPv6 binding for Railway
-    config.use_reloader = os.getenv("ENV") == "development"
+    config.use_reloader = os.getenv("ENV") == "dev"
     config.graceful_timeout = 30  # Allow 30 seconds for graceful shutdown
 
     async def shutdown_trigger():

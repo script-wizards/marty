@@ -1,15 +1,15 @@
 """
 Comprehensive tests for database operations.
 Tests CRUD operations, async functionality, and error handling.
+
+All database tests use PostgreSQL integration testing to match production.
 """
 
-from collections.abc import AsyncGenerator
 from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.crud import (
     BookCRUD,
@@ -20,7 +20,6 @@ from src.crud import (
     RateLimitCRUD,
 )
 from src.database import (
-    Base,
     Book,
     BookCreate,
     BookUpdate,
@@ -33,39 +32,29 @@ from src.database import (
     MessageCreate,
 )
 
-# Test database configuration
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Use PostgreSQL integration test fixtures from conftest.py
+# All database tests now require proper integration test setup
+
+pytestmark = (
+    pytest.mark.integration
+)  # Mark all tests in this module as integration tests
 
 
 @pytest_asyncio.fixture
-async def test_engine():
-    """Create test database engine."""
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        echo=False,
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
+async def db_session(use_postgres_db):
+    """Use clean PostgreSQL database session for all tests."""
+    # The use_postgres_db fixture provides the database setup
+    test_session_local, test_engine = use_postgres_db
 
-    # Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    async with test_session_local() as session:
+        # Start a transaction that will be rolled back after the test
+        transaction = await session.begin()
 
-    yield engine
-
-    # Cleanup
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create test database session."""
-    async_session = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with async_session() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            # Always rollback the transaction to ensure test isolation
+            await transaction.rollback()
 
 
 @pytest_asyncio.fixture

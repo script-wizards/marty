@@ -16,10 +16,18 @@ Usage:
 import asyncio
 import json
 import os
+import sys
+from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 
-from config import config
+load_dotenv()
+
+# Add src to path so we can import config
+script_dir = Path(__file__).parent
+src_dir = script_dir.parent / "src"
+sys.path.insert(0, str(src_dir))
 
 
 async def test_simple_request():
@@ -52,7 +60,7 @@ async def test_simple_request():
         try:
             print("🔍 Testing Hardcover API connection...")
             response = await client.post(
-                config.HARDCOVER_API_URL,
+                "https://api.hardcover.app/v1/graphql",
                 headers=headers,
                 json=test_query,
                 timeout=30.0,
@@ -128,7 +136,7 @@ async def explore_schema():
         try:
             print("\n🔍 Exploring GraphQL schema...")
             response = await client.post(
-                config.HARDCOVER_API_URL,
+                "https://api.hardcover.app/v1/graphql",
                 headers=headers,
                 json=introspection_query,
                 timeout=30.0,
@@ -244,7 +252,7 @@ async def test_book_search():
                 }
             """,
         },
-        # Try books by primary key
+        # Try books by primary key with correct fields
         {
             "name": "Book by ID",
             "query": """
@@ -252,7 +260,54 @@ async def test_book_search():
                     books_by_pk(id: 1) {
                         id
                         title
+                        subtitle
                         description
+                        pages
+                        release_year
+                        rating
+                        cached_contributors
+                        cached_tags
+                        slug
+                        compilation
+                        image {
+                            url
+                        }
+                        ratings_count
+                        reviews_count
+                        users_count
+                    }
+                }
+            """,
+        },
+        # Test books query with actual available fields
+        {
+            "name": "Books with available fields",
+            "query": """
+                query {
+                    books(limit: 2) {
+                        id
+                        title
+                        subtitle
+                        description
+                        pages
+                        release_year
+                        rating
+                        cached_contributors
+                        cached_tags
+                        slug
+                        compilation
+                        users_count
+                        ratings_count
+                        reviews_count
+                        image {
+                            url
+                        }
+                        contributions {
+                            author {
+                                id
+                                name
+                            }
+                        }
                     }
                 }
             """,
@@ -267,7 +322,7 @@ async def test_book_search():
 
             try:
                 response = await client.post(
-                    config.HARDCOVER_API_URL,
+                    "https://api.hardcover.app/v1/graphql",
                     headers=headers,
                     json={"query": search_test["query"]},
                     timeout=30.0,

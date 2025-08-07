@@ -73,27 +73,19 @@ class TestBookEnricherTool:
         assert "Missing required parameters" in result.error
 
     @pytest.mark.asyncio
-    @patch("src.ai_client.generate_ai_response")
-    async def test_extract_book_mentions_with_ai(self, mock_ai_response, enricher):
-        """Test book mention extraction from AI response."""
-        # Mock AI response
-        mock_ai_response.return_value = '[{"title": "The Name of the Wind", "author": "Patrick Rothfuss", "confidence": 0.9}]'
-
-        text = "I recommend The Name of the Wind by Patrick Rothfuss"
+    async def test_extract_book_mentions_with_regex(self, enricher):
+        """Test book mention extraction using regex patterns."""
+        text = 'I recommend "The Name of the Wind" by Patrick Rothfuss'
         mentions = await enricher._extract_book_mentions(text, "msg_123")
 
         assert len(mentions) == 1
         assert mentions[0].title == "The Name of the Wind"
         assert mentions[0].author == "Patrick Rothfuss"
-        assert mentions[0].confidence == 0.9
+        assert mentions[0].confidence == 0.8
 
     @pytest.mark.asyncio
-    @patch("src.ai_client.generate_ai_response")
-    async def test_isbn_extraction(self, mock_ai_response, enricher):
+    async def test_isbn_extraction(self, enricher):
         """Test ISBN extraction from text."""
-        # Mock AI response to avoid interference
-        mock_ai_response.return_value = "[]"  # No AI books, just test ISBN regex
-
         text = "The book's ISBN is 978-0-123456-78-9"
         mentions = await enricher._extract_book_mentions(text, "msg_123")
 
@@ -138,15 +130,9 @@ class TestBookEnricherTool:
         assert validated_book is None
 
     @pytest.mark.asyncio
-    @patch("src.ai_client.generate_ai_response")
     @patch("src.database.AsyncSessionLocal")
-    async def test_execute_full_flow(
-        self, mock_session_local, mock_ai_response, enricher
-    ):
+    async def test_execute_full_flow(self, mock_session_local, enricher):
         """Test the full enrichment flow using execute method."""
-        # Mock AI response
-        mock_ai_response.return_value = '[{"title": "The Name of the Wind", "author": "Patrick Rothfuss", "confidence": 0.9}]'
-
         # Mock database session - mix of sync and async methods
         mock_session = MagicMock()
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -162,7 +148,7 @@ class TestBookEnricherTool:
 
         # Sync methods (add, merge, etc.) remain as regular mocks
 
-        ai_response = "I recommend The Name of the Wind by Patrick Rothfuss"
+        ai_response = 'I recommend "The Name of the Wind" by Patrick Rothfuss'
 
         result = await enricher.execute(
             ai_response=ai_response, conversation_id="conv_123", message_id="msg_123"

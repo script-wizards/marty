@@ -275,9 +275,9 @@ class ConversationManagerTool(BaseTool):
                     session, conversation.id, limit=self.message_limit
                 )
 
-                # Convert to conversation messages
+                # Convert to conversation messages (reverse to get chronological order)
                 conv_messages = []
-                for msg in messages:
+                for msg in reversed(messages):  # Reverse to get chronological order
                     conv_msg = ConversationMessage(
                         id=str(msg.id),
                         content=msg.content,

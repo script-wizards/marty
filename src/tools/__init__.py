@@ -16,14 +16,6 @@ class ToolRegistry:
         """Register all core tools."""
         # Import and register tools here
         try:
-            from .book.enricher import BookEnricherTool
-
-            self.register(BookEnricherTool)
-        except ImportError as e:
-            # Tool dependencies might not be available in all environments
-            print(f"Warning: Could not register BookEnricherTool: {e}")
-
-        try:
             from .conversation.manager import ConversationManagerTool
 
             self.register(ConversationManagerTool)
@@ -38,6 +30,20 @@ class ToolRegistry:
         except ImportError as e:
             # Tool dependencies might not be available in all environments
             print(f"Warning: Could not register HardcoverTool: {e}")
+
+        try:
+            from .discord.thread_rename import ThreadRenameTool
+
+            self.register(ThreadRenameTool)
+        except ImportError as e:
+            print(f"Warning: Could not register ThreadRenameTool: {e}")
+
+        try:
+            from .utils.query_optimizer import QueryOptimizerTool
+
+            self.register(QueryOptimizerTool)
+        except ImportError as e:
+            print(f"Warning: Could not register QueryOptimizerTool: {e}")
 
     def register(self, tool_class: type[BaseTool]):
         """Register a tool class."""

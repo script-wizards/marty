@@ -289,23 +289,14 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
                 conversation = await create_conversation(db, conversation_data)
                 logger.info(f"Created new conversation for {phone}")
 
-            # Save the incoming message
-            incoming_message = MessageCreate(
-                conversation_id=conversation.id,
-                direction="inbound",
-                content=user_message,
-                status="received",
-            )
-            await add_message(db, incoming_message)
-
-            # Get recent conversation history
+            # Get recent conversation history FIRST (before saving new message)
             recent_messages = await get_conversation_messages(
                 db, conversation.id, limit=10
             )
 
-            # Convert to ConversationMessage format (exclude the current message)
+            # Convert to ConversationMessage format (reverse for chronological order)
             conversation_history = []
-            for msg in recent_messages[:-1]:  # Exclude the current message
+            for msg in reversed(recent_messages):  # Reverse to get chronological order
                 conversation_history.append(
                     ConversationMessage(
                         role="user" if msg.direction == "inbound" else "assistant",
@@ -313,6 +304,15 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
                         timestamp=msg.timestamp,
                     )
                 )
+
+            # Save the incoming message AFTER getting history
+            incoming_message = MessageCreate(
+                conversation_id=conversation.id,
+                direction="inbound",
+                content=user_message,
+                status="received",
+            )
+            await add_message(db, incoming_message)
 
             # Prepare customer context
             customer_context = {
@@ -325,7 +325,7 @@ async def process_incoming_sms(payload: SinchSMSWebhookPayload) -> None:
             }
 
             # Generate AI response
-            ai_response = await generate_ai_response(
+            ai_response, tool_results = await generate_ai_response(
                 user_message=user_message,
                 conversation_history=conversation_history,
                 customer_context=customer_context,

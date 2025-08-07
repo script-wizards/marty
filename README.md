@@ -8,8 +8,8 @@ marty is a burnt-out wizard who used to do software engineering and now works at
 
 ## What It Does
 
-- chat with customers about books
-- give book recommendations using claude ai
+- chat with customers about books via SMS and Discord
+- give book recommendations using claude ai with tool calling
 - remember conversation history
 - integrate with hardcover api for book data
 - handle customer info and orders (eventually)
@@ -359,7 +359,7 @@ casual texting style with wizard references
 
 implemented:
 - fastapi application with async support
-- claude ai integration with conversation history
+- claude ai integration with conversation history and tool calling
 - database layer with migrations
 - hardcover api integration
 - comprehensive test suite
@@ -368,6 +368,7 @@ implemented:
 - sms provider integration with multi-message support
 - redis-based rate limiting with burst protection
 - phone number validation and normalization
+- discord bot integration with thread management
 
 in development:
 - square api for payments

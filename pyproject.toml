@@ -1,9 +1,9 @@
 [project]
 name = "marty"
-version = "0.2.0"
+version = "0.4.0"
 description = "AI wizard bookseller"
 readme = "README.md"
-authors = [{ name = "Your Name", email = "your.email@example.com" }]
+authors = [{ name = "Panat Taranat", email = "panat@dungeonbooks.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.104.0",
@@ -24,6 +24,7 @@ dependencies = [
     "redis>=6.2.0",
     "structlog>=25.4.0",
     "phonenumbers>=9.0.9",
+    "discord-py>=2.5.2",
 ]
 
 [dependency-groups]
@@ -38,6 +39,7 @@ dev = [
     "pytest-dotenv>=0.5.2",
     "ruff>=0.12.3",
     "ty>=0.0.1a14",
+    "python-dotenv>=1.1.1",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -1,3 +1,5 @@
 """Utility tools for Marty."""
 
-# Tools will be added here as we refactor them
+from .query_optimizer import QueryOptimizerTool
+
+__all__ = ["QueryOptimizerTool"]

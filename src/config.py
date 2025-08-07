@@ -3,6 +3,15 @@
 import os
 from datetime import datetime
 
+# Load .env file for local development (if it exists)
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    # python-dotenv not installed, continue without .env loading
+    pass
+
 
 class Config:
     """Application configuration."""

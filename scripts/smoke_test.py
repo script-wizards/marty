@@ -79,7 +79,7 @@ class SmokeTestRunner:
             from src.ai_client import ConversationMessage, generate_ai_response
 
             # Test basic response
-            response = await generate_ai_response("Hello", [])
+            response, _ = await generate_ai_response("Hello", [])
             if not response or len(response) < 5:
                 raise SmokeTestError("Response too short or empty")
 
@@ -90,7 +90,7 @@ class SmokeTestRunner:
                 )
             ]
 
-            response2 = await generate_ai_response("What's your name?", history)
+            response2, _ = await generate_ai_response("What's your name?", history)
             if not response2:
                 raise SmokeTestError("No response with history")
 
@@ -182,7 +182,7 @@ class SmokeTestRunner:
                 await create_conversation(session, conversation_data)
 
             # Generate AI response
-            response = await generate_ai_response(
+            response, _ = await generate_ai_response(
                 "recommend a fantasy book",
                 [],
                 customer_context={

@@ -61,7 +61,9 @@ class ToolCallingChatProcessor:
 
         # Step 2: Prepare conversation history for AI
         ai_history = []
-        for msg in conversation.messages[-5:]:  # Last 5 messages for context
+        for msg in conversation.messages[
+            -5:
+        ]:  # Last 5 messages for context (now in chronological order)
             role = "user" if msg.direction == "inbound" else "assistant"
             ai_history.append(
                 ConversationMessage(
@@ -78,7 +80,7 @@ class ToolCallingChatProcessor:
             "current_day": "Sunday",
         }
 
-        ai_response = await generate_ai_response(
+        ai_response, tool_results = await generate_ai_response(
             user_message,
             ai_history[:-1],  # Exclude the current user message from history
             customer_context,
