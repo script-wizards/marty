@@ -46,24 +46,15 @@ async def db_session(use_postgres_db):
     # The use_postgres_db fixture provides the database setup
     test_session_local, test_engine = use_postgres_db
 
-    # Clean all tables before each test
-    from sqlalchemy import text
-
-    from src.database import Base
-
-    async with test_engine.begin() as conn:
-        # Disable foreign key checks temporarily
-        await conn.execute(text("SET session_replication_role = replica;"))
-
-        # Delete all data from all tables
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
-
-        # Re-enable foreign key checks
-        await conn.execute(text("SET session_replication_role = DEFAULT;"))
-
     async with test_session_local() as session:
-        yield session
+        # Start a transaction that will be rolled back after the test
+        transaction = await session.begin()
+
+        try:
+            yield session
+        finally:
+            # Always rollback the transaction to ensure test isolation
+            await transaction.rollback()
 
 
 @pytest_asyncio.fixture

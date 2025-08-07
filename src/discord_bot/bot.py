@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import discord  # type: ignore
 from discord import app_commands  # type: ignore
@@ -111,7 +112,7 @@ def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discor
     links = []
 
     # Always add Dungeon Books store search first
-    title_for_search = title.replace(" ", "%20")
+    title_for_search = quote(title)
     dungeonbooks_url = f"https://www.dungeonbooks.com/s/search?q={title_for_search}"
     links.append(f"[Check Our Store]({dungeonbooks_url})")
 

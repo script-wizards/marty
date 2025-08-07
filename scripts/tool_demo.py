@@ -80,7 +80,7 @@ class ToolCallingChatProcessor:
             "current_day": "Sunday",
         }
 
-        ai_response = await generate_ai_response(
+        ai_response, tool_results = await generate_ai_response(
             user_message,
             ai_history[:-1],  # Exclude the current user message from history
             customer_context,

@@ -17,6 +17,20 @@ from src.tools.base import BaseTool, ToolResult
 
 logger = structlog.get_logger(__name__)
 
+# Word-to-number mapping for ordinal book numbers
+WORD_TO_NUMBER_MAP = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+}
+
 
 class QueryOptimizerTool(BaseTool):
     """
@@ -283,19 +297,7 @@ Return ONLY a JSON object with this exact structure:
             if match:
                 number_text = match.group(1)
                 # Convert word numbers to digits
-                word_to_num = {
-                    "first": 1,
-                    "second": 2,
-                    "third": 3,
-                    "fourth": 4,
-                    "fifth": 5,
-                    "sixth": 6,
-                    "seventh": 7,
-                    "eighth": 8,
-                    "ninth": 9,
-                    "tenth": 10,
-                }
-                book_number = word_to_num.get(number_text, number_text)
+                book_number = WORD_TO_NUMBER_MAP.get(number_text, number_text)
                 is_series_query = True
                 break
 
