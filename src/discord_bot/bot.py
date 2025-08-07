@@ -25,6 +25,9 @@ from ..tools.external.hardcover import HardcoverTool
 
 logger = logging.getLogger(__name__)
 
+# Minimum number of ratings required to display a book's rating
+MIN_RATING_THRESHOLD = 5
+
 
 def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discord.Embed:
     """Create a rich Discord embed for a book using Hardcover API data."""
@@ -52,8 +55,8 @@ def create_book_embed(book_data: dict[str, Any], is_rpg: bool = False) -> discor
     rating = book_data.get("rating")
     ratings_count = book_data.get("ratings_count")
 
-    # Separate rating and ratings count for cleaner display
-    if rating:
+    # Only show rating if there are enough ratings to make it meaningful
+    if rating and ratings_count and ratings_count >= MIN_RATING_THRESHOLD:
         embed.add_field(name="Rating", value=f"⭐ {rating:.1f}", inline=True)
 
     pages = book_data.get("pages")
