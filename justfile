@@ -30,23 +30,23 @@ dev: test-infra-up
 
 # Start production server
 run:
-    python src/main.py
+    uv run python src/main.py
 
 # Run all tests
 test:
-    pytest
+    uv run pytest
 
 # Run tests with verbose output
 test-verbose:
-    pytest -v
+    uv run pytest -v
 
 # Run specific test file
 test-file file:
-    pytest tests/{{file}}
+    uv run pytest tests/{{file}}
 
 # Run tests with coverage report
 test-cov:
-    pytest --cov=. --cov-report=html
+    uv run pytest --cov=. --cov-report=html
 
 # Format code with ruff
 format:
@@ -62,7 +62,7 @@ lint-fix:
 
 # Bandit security scan
 bandit:
-    bandit -r src
+    uv run bandit -r src
 
 # Type check with ty
 check:
@@ -76,36 +76,36 @@ check-all:
 
 # Apply database migrations
 db-migrate:
-    alembic upgrade head
+    uv run alembic upgrade head
 
 # Rollback last migration
 db-rollback:
-    alembic downgrade -1
+    uv run alembic downgrade -1
 
 # Reset database to base and reapply all migrations
 db-reset:
-    alembic downgrade base
-    alembic upgrade head
+    uv run alembic downgrade base
+    uv run alembic upgrade head
 
 # Generate new migration
 db-revision message:
-    alembic revision --autogenerate -m "{{message}}"
+    uv run alembic revision --autogenerate -m "{{message}}"
 
 # Start interactive chat with Marty (internal testing)
 chat:
-    python scripts/chat.py
+    uv run python scripts/chat.py
 
 # Test SMS functionality with real API calls (internal testing)
 sms:
-    python scripts/sms.py
+    uv run python scripts/sms.py
 
 # Run comprehensive integration test (costs money)
 smoke-test:
-    python scripts/smoke_test.py
+    uv run python scripts/smoke_test.py
 
 # Test database connection
 test-db:
-    python src/database.py
+    uv run python src/database.py
 
 # Start test infrastructure (PostgreSQL + Redis for testing)
 test-infra-up:
@@ -117,7 +117,7 @@ test-infra-down:
 
 # Run all tests with test infra
 test-all: test-infra-up
-    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 pytest
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 uv run pytest
     just test-infra-down
 
 # Complete project setup
@@ -135,11 +135,11 @@ setup-env:
 
 # Install pre-commit hooks
 pre-commit-install:
-    pre-commit install
+    uv run pre-commit install
 
 # Run pre-commit on all files
 pre-commit-run:
-    pre-commit run --all-files
+    uv run pre-commit run --all-files
 
 # Clean up generated files
 clean:
@@ -192,7 +192,7 @@ help:
 # Run lint, type check, and unit tests (fast, no infra)
 ci:
     parallel --jobs $(nproc) ::: "just lint" "just check" "just bandit"
-    pytest -m "not integration"
+    uv run pytest -m "not integration"
 
 # Run lint, type check, and all tests (with infra)
 ci-full:
@@ -201,7 +201,7 @@ ci-full:
 
 # Run only integration tests (requires test infra)
 test-integration: test-infra-up
-    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 pytest -m integration
+    TEST_DATABASE_URL=postgresql://marty_test:password@localhost:5432/marty_test TEST_REDIS_URL=redis://localhost:6379 uv run pytest -m integration
     just test-infra-down
 
 # Watch for changes and restart development server

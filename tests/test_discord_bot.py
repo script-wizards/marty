@@ -1,6 +1,6 @@
 """Tests for the Discord bot functionality."""
 
-from src.discord_bot.bot import MIN_RATING_THRESHOLD, create_book_embed
+from src.discord_bot.embeds import MIN_RATING_THRESHOLD, create_book_embed
 
 
 class TestCreateBookEmbed:
@@ -47,6 +47,58 @@ class TestCreateBookEmbed:
         # But other fields should still be there
         assert "Pages" in field_names
         assert "Year" in field_names
+
+    def test_create_book_embed_with_cover_image_dict(self):
+        """Test that cover image is set when provided as dict with url."""
+        book_data = {
+            "title": "Test Book with Cover",
+            "author": "Test Author",
+            "image": {"url": "https://example.com/cover.jpg"},
+        }
+
+        embed = create_book_embed(book_data)
+
+        # Check that the embed has the image set
+        assert embed.image.url == "https://example.com/cover.jpg"
+
+    def test_create_book_embed_with_cover_image_string(self):
+        """Test that cover image is set when provided as string."""
+        book_data = {
+            "title": "Test Book with Cover",
+            "author": "Test Author",
+            "image": "https://example.com/cover.jpg",
+        }
+
+        embed = create_book_embed(book_data)
+
+        # Check that the embed has the image set
+        assert embed.image.url == "https://example.com/cover.jpg"
+
+    def test_create_book_embed_no_cover_image(self):
+        """Test that no image is set when none provided."""
+        book_data = {
+            "title": "Test Book No Cover",
+            "author": "Test Author",
+        }
+
+        embed = create_book_embed(book_data)
+
+        # Check that no image is set
+        assert embed.image.url is None
+
+    def test_create_book_embed_invalid_image_data(self):
+        """Test that invalid image data doesn't break embed creation."""
+        book_data = {
+            "title": "Test Book Invalid Image",
+            "author": "Test Author",
+            "image": {"invalid": "data"},  # Missing 'url' key
+        }
+
+        embed = create_book_embed(book_data)
+
+        # Check that no image is set but embed is still created
+        assert embed.image.url is None
+        assert embed.title == "Test Book Invalid Image"
 
     def test_create_book_embed_with_exactly_threshold_ratings(self):
         """Test rating is shown when ratings_count equals MIN_RATING_THRESHOLD."""

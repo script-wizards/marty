@@ -47,14 +47,15 @@ async def db_session(use_postgres_db):
     test_session_local, test_engine = use_postgres_db
 
     async with test_session_local() as session:
-        # Start a transaction that will be rolled back after the test
-        transaction = await session.begin()
-
         try:
             yield session
         finally:
-            # Always rollback the transaction to ensure test isolation
-            await transaction.rollback()
+            # Rollback any uncommitted changes to ensure test isolation
+            try:
+                await session.rollback()
+            except Exception:
+                # Session may already be closed, ignore errors
+                pass
 
 
 @pytest_asyncio.fixture
