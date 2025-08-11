@@ -463,8 +463,6 @@ LOG_LEVEL=DEBUG
 
 ## License
 
-Copyright (c) 2025 Script Wizards
-All rights reserved.
+MIT License - see [LICENSE](LICENSE) file for details.
 
-This source code is proprietary and confidential.
-Unauthorized copying, distribution, or use is strictly prohibited.
+Copyright (c) 2025 Script Wizards
