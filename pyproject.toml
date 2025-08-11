@@ -19,7 +19,6 @@ dependencies = [
     "gql>=3.4.0",
     "aiohttp>=3.9.0",
     "greenlet>=3.2.3",
-    "psycopg2-binary>=2.9.10",
     "anthropic>=0.57.1",
     "redis>=6.2.0",
     "structlog>=25.4.0",
