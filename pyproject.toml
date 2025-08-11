@@ -24,6 +24,7 @@ dependencies = [
     "structlog>=25.4.0",
     "phonenumbers>=9.0.9",
     "discord-py>=2.5.2",
+    "pg8000>=1.31.4",
 ]
 
 [dependency-groups]
