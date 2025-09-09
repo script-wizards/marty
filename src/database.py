@@ -824,8 +824,35 @@ async def cleanup_old_conversations(
         conversations_deleted = 0
 
         if old_conversation_ids:
-            # Delete messages from old conversations (keep some recent ones)
-            for conv_id in old_conversation_ids:
+            # For old conversations, delete all messages first, then delete conversations
+            # This ensures we don't violate foreign key constraints
+
+            # Delete ALL messages from old conversations first
+            delete_messages_query = delete(Message).where(
+                Message.conversation_id.in_(old_conversation_ids)
+            )
+            result = await db.execute(delete_messages_query)
+            messages_deleted = result.rowcount
+
+            # Now we can safely delete the conversations
+            delete_conversations_query = delete(Conversation).where(
+                Conversation.id.in_(old_conversation_ids)
+            )
+            result = await db.execute(delete_conversations_query)
+            conversations_deleted = result.rowcount
+
+        # Separately handle keeping recent messages for active conversations
+        # This deletes old messages from conversations we're NOT deleting
+        if keep_recent_messages > 0:
+            active_conversations_query = select(Conversation.id).where(
+                Conversation.created_at >= cutoff_date
+            )
+            active_conversations_result = await db.execute(active_conversations_query)
+            active_conversation_ids = [
+                row[0] for row in active_conversations_result.fetchall()
+            ]
+
+            for conv_id in active_conversation_ids:
                 # Get messages to keep (most recent ones)
                 recent_messages_query = (
                     select(Message.id)
@@ -836,26 +863,14 @@ async def cleanup_old_conversations(
                 recent_result = await db.execute(recent_messages_query)
                 keep_message_ids = [row[0] for row in recent_result.fetchall()]
 
-                # Delete old messages (not in keep list)
+                # Delete old messages from active conversations (not in keep list)
                 if keep_message_ids:
-                    delete_messages_query = delete(Message).where(
+                    delete_old_messages_query = delete(Message).where(
                         Message.conversation_id == conv_id,
                         Message.id.notin_(keep_message_ids),
                     )
-                else:
-                    delete_messages_query = delete(Message).where(
-                        Message.conversation_id == conv_id
-                    )
-
-                result = await db.execute(delete_messages_query)
-                messages_deleted += result.rowcount
-
-            # Delete old conversations
-            delete_conversations_query = delete(Conversation).where(
-                Conversation.id.in_(old_conversation_ids)
-            )
-            result = await db.execute(delete_conversations_query)
-            conversations_deleted = result.rowcount
+                    result = await db.execute(delete_old_messages_query)
+                    messages_deleted += result.rowcount
 
         await db.commit()
 
