@@ -17,7 +17,7 @@ from pathlib import Path
 # Add src to path so we can import from it
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from database import cleanup_database, get_db_session  # noqa: E402
+from database import cleanup_database, close_db, get_db_session  # noqa: E402
 
 
 async def main():
@@ -66,6 +66,9 @@ async def main():
     except Exception as e:
         print(f"\n❌ Cleanup failed: {e}")
         return 1
+    finally:
+        # Ensure database connections are properly closed
+        await close_db()
 
     return 0
 
