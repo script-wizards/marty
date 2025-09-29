@@ -4,7 +4,6 @@
     "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "alembic upgrade head && hypercorn src.main:app --bind [::]:$PORT",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "internal": true
